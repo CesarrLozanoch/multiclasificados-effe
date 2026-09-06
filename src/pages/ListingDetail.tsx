@@ -467,12 +467,32 @@ export default function ListingDetail() {
     toast({ title: "Marcado como venta concretada", description: who === "buyer" ? "Comprador confirmado." : "Vendedor confirmado." });
   };
 
-  const requireAuthOrRun = (action: () => void) => {
-    // Exige una sesión REAL de Supabase (no demo) para contactar/postular/reportar.
+  /**
+   * Acciones que necesitan una cuenta. Si no hay sesión, se avisa y se manda al
+   * login, volviendo después a este mismo aviso.
+   *
+   * EL MOTIVO VA EN EL MENSAJE, y no es cosmético. El texto era siempre
+   * «Necesitas una cuenta para contactar al anunciante», dijeras lo que dijeras:
+   * pulsabas «Guardar», te hablaban de contactar al anunciante y aparecías en la
+   * pantalla de login. Se reportó como «el botón Guardar saca de la sesión»
+   * (2026-09-05) — y no saca de nada: es la PRIMERA acción de esta página que
+   * necesita sesión, así que es donde se nota una sesión que ya estaba caída.
+   * Ver la nota de abajo sobre por qué se cae sola.
+   */
+  const requireAuthOrRun = (action: () => void, motivo = "usar esta opción") => {
+    // Exige una sesión REAL de Supabase (no demo).
+    //
+    // OJO al diagnosticar «me sacó de la sesión»: aquí NO se cierra ninguna. La
+    // sesión se lee de localStorage de forma síncrona (`useSession`), así que
+    // quien esté dentro entra por el `action()` sin más. Si alguien acaba en el
+    // login es porque su sesión ya no existía: el token dura una hora y, si el
+    // refresco falla, GoTrue emite SIGNED_OUT y `SupabaseAuthBridge` la limpia.
+    // Navegar por avisos no lo revela —son públicos—; la primera acción que
+    // pide sesión, sí.
     if (!session?.supabase) {
       toast({
         title: "Inicia sesión para continuar",
-        description: "Necesitas una cuenta para contactar al anunciante.",
+        description: `Necesitas una cuenta para ${motivo}.`,
       });
       navigate(`/auth?redirect=/aviso/${listing.id}`);
       return;
@@ -820,13 +840,25 @@ export default function ListingDetail() {
                 className={ACTION_BTN_SAVE}
                 onClick={() =>
                   requireAuthOrRun(async () => {
-                    const res = await toggle(listing.id);
-                    if (res === null) {
-                      toast({ title: "Disponible con avisos reales" });
-                      return;
+                    // Con `catch`: `toggle` LANZA si la base contesta un error
+                    // (permisos, red). Sin esto quedaba una promesa rechazada
+                    // sin recoger y el usuario no veía absolutamente nada —el
+                    // corazón no cambiaba y no había explicación—.
+                    try {
+                      const res = await toggle(listing.id);
+                      if (res === null) {
+                        toast({ title: "Disponible con avisos reales" });
+                        return;
+                      }
+                      toast({ title: res ? "Guardado en favoritos" : "Quitado de favoritos" });
+                    } catch {
+                      toast({
+                        title: "No se pudo guardar",
+                        description: "Inténtalo de nuevo en un momento.",
+                        variant: "destructive",
+                      });
                     }
-                    toast({ title: res ? "Guardado en favoritos" : "Quitado de favoritos" });
-                  })
+                  }, "guardar avisos")
                 }
               >
                 <Heart size={14} className={fav ? "fill-secondary text-secondary" : ""} /> {fav ? "Guardado" : "Guardar"}
@@ -839,7 +871,7 @@ export default function ListingDetail() {
                   <ShareMenuItems title={listing.title} listingId={listing.id} />
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm" className={ACTION_BTN} onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
+              <Button variant="outline" size="sm" className={ACTION_BTN} onClick={() => requireAuthOrRun(() => setReportOpen(true), "reportar un aviso")}>
                 <Flag size={14} /> Reportar
               </Button>
             </div>
@@ -875,7 +907,7 @@ export default function ListingDetail() {
                   <Button
                     size="lg"
                     className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                    onClick={() => requireAuthOrRun(() => setMessageOpen(true))}
+                    onClick={() => requireAuthOrRun(() => setMessageOpen(true), "escribir al anunciante")}
                   >
                     <MessageSquare size={16} /> Enviar mensaje
                   </Button>
@@ -891,7 +923,7 @@ export default function ListingDetail() {
                       variant="outline"
                       size="lg"
                       className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                      onClick={() => requireAuthOrRun(handleRevealPhone)}
+                      onClick={() => requireAuthOrRun(handleRevealPhone, "ver el teléfono")}
                     >
                       <Phone size={16} />
                       {phoneRevealed ? phoneLabel : "Mostrar teléfono"}
@@ -910,7 +942,7 @@ export default function ListingDetail() {
                     variant="outline"
                     size="lg"
                     className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                    onClick={() => requireAuthOrRun(() => setApplyOpen(true))}
+                    onClick={() => requireAuthOrRun(() => setApplyOpen(true), "postular a un empleo")}
                   >
                     <ClipboardCheck size={16} /> Postularme
                   </Button>
@@ -981,7 +1013,7 @@ export default function ListingDetail() {
             )}
             {!isOwner && (
               <button
-                onClick={() => requireAuthOrRun(() => setUserReportOpen(true))}
+                onClick={() => requireAuthOrRun(() => setUserReportOpen(true), "reportar a un usuario")}
                 className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors pt-1"
               >
                 <Flag size={12} /> Reportar a este usuario

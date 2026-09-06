@@ -4,6 +4,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { RedesSocialesPie } from "@/components/RedesSocialesPie";
+import { ubicacionDeAviso } from "@/lib/ubicacionDeAviso";
 import { AcercaDeNosotros } from "@/components/AcercaDeNosotros";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
@@ -32,7 +33,7 @@ const PeruMapTeaser = lazy(() => import("@/components/PeruMapTeaser"));
 // poder precargarlo desde el <head> del index.html y que sea el LCP descubrible
 // antes de ejecutar el bundle (IT2-008). El .jpg original queda como fuente.
 const heroBg = "/hero-bg.webp";
-import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
+import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -352,6 +353,26 @@ const Index = () => {
                     <p className="text-primary-foreground/70 text-sm mt-2 max-w-xs">
                       Oportunidades reales publicadas hoy en toda la plataforma.
                     </p>
+                    {/* De dónde es el aviso de la foto. Lo pidió el cliente: la
+                        tarjeta enseñaba una imagen sin decir de dónde venía, y
+                        «avisos en toda la plataforma» sobre una foto suelta no
+                        dice nada. Va con el título delante para que se entienda
+                        que describe ESA foto y no la plataforma entera.
+                        Si no se sabe la ubicación no se pinta la línea: un
+                        icono de mapa con el hueco al lado queda peor. */}
+                    {listings[0] && (() => {
+                      const donde = ubicacionDeAviso(listings[0]);
+                      if (!donde) return null;
+                      return (
+                        <p className="mt-4 pt-4 border-t border-white/20 flex items-start gap-2 text-sm text-primary-foreground/90 max-w-xs">
+                          <MapPin size={15} className="text-secondary shrink-0 mt-0.5" />
+                          <span className="min-w-0">
+                            <span className="block font-semibold truncate">{listings[0].title}</span>
+                            <span className="block text-primary-foreground/70">{donde}</span>
+                          </span>
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

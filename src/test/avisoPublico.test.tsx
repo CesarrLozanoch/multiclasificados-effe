@@ -181,8 +181,21 @@ describe("los enlaces al aviso no pasan por el login", () => {
     const path = await import("node:path");
     const src = fs.readFileSync(path.resolve(__dirname, "../../src/pages/ListingDetail.tsx"), "utf8");
     expect(src).toContain("auth?redirect=/aviso");
-    // Y está dentro de requireAuthOrRun, no en un efecto que corra al entrar.
+
+    // Y está dentro de `requireAuthOrRun`, no en un efecto que corra al entrar:
+    // eso último SÍ sería el muro, porque mandaría al login a cualquiera que
+    // abriera un aviso compartido.
+    //
+    // Se comprueba por lo que hay ENTRE la declaración y el salto, y no mirando
+    // los N caracteres anteriores: esa versión medía 400 y se rompió sola en
+    // cuanto la función ganó un comentario largo — fallaba sin que nada del
+    // comportamiento hubiera cambiado.
     const i = src.indexOf("auth?redirect=/aviso");
-    expect(src.slice(Math.max(0, i - 400), i)).toContain("requireAuthOrRun");
+    const declaracion = src.lastIndexOf("const requireAuthOrRun", i);
+    expect(declaracion, "el salto al login no está dentro de requireAuthOrRun").toBeGreaterThan(-1);
+    expect(
+      src.slice(declaracion, i),
+      "hay un useEffect entre la guarda y el salto: eso correría al entrar",
+    ).not.toContain("useEffect(");
   });
 });
