@@ -112,6 +112,50 @@ export async function syncSession(): Promise<Session | null> {
   return setSessionData({ role, name, initials, email: user.email ?? undefined, supabase: true });
 }
 
+/**
+ * La sesión local, RECONSTRUYÉNDOLA si se perdió teniendo Supabase una viva.
+ *
+ * ── EL DESAJUSTE QUE ARREGLA ─────────────────────────────────────────────────
+ *
+ * Hay DOS almacenes de sesión y pueden separarse:
+ *
+ *   · el de Supabase (su propio localStorage), que se refresca solo cada hora
+ *   · el nuestro, `effe_session`, que escribe `syncSession` y lee toda la app
+ *
+ * Si al cargar la página falla la lectura de roles —un tropiezo de red, un
+ * arranque en frío de la base—, `syncSession` lanza `RoleSyncError` y NO escribe
+ * el nuestro. `SupabaseAuthBridge` se come el error y nada lo reintenta hasta el
+ * siguiente refresco de token, que puede tardar una hora.
+ *
+ * Durante ese rato el usuario ESTÁ autenticado —Supabase tiene su sesión viva y
+ * rotando— pero la aplicación lo trata como visitante: la barra lo enseña
+ * desconectado y cualquier acción con guarda lo manda al login. Se reportó como
+ * «el botón Guardar saca de la sesión» (2026-09-05), y se comprobó en la base
+ * que la sesión de ese usuario estaba intacta y rotando cada 58 minutos.
+ *
+ * Así que antes de dar a alguien por desconectado hay que PREGUNTARLE A
+ * SUPABASE, que es quien lo sabe. Solo si ahí tampoco hay nada, es un visitante.
+ */
+export async function asegurarSesion(): Promise<Session | null> {
+  const local = getSession();
+  if (local) return local;
+
+  // Sin sesión local: puede ser un visitante de verdad… o el desajuste de
+  // arriba. `getSession()` de Supabase lee su almacén sin ir a la red, así que
+  // esto no añade una espera perceptible al caso normal.
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.user) return null;
+
+  try {
+    return await syncSession();
+  } catch {
+    // Si tampoco ahora se pueden leer los roles, se mantiene el criterio de
+    // fallar cerrado: es preferible pedir que inicie sesión que dejarle actuar
+    // con un rol que no hemos podido confirmar.
+    return null;
+  }
+}
+
 // Perfil propio del usuario logueado (para su panel de Configuración).
 export interface MyProfile {
   id: string;

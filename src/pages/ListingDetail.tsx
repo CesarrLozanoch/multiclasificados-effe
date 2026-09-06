@@ -48,6 +48,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import { asegurarSesion } from "@/lib/auth";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
@@ -479,7 +480,7 @@ export default function ListingDetail() {
    * necesita sesión, así que es donde se nota una sesión que ya estaba caída.
    * Ver la nota de abajo sobre por qué se cae sola.
    */
-  const requireAuthOrRun = (action: () => void, motivo = "usar esta opción") => {
+  const requireAuthOrRun = async (action: () => void, motivo = "usar esta opción") => {
     // Exige una sesión REAL de Supabase (no demo).
     //
     // OJO al diagnosticar «me sacó de la sesión»: aquí NO se cierra ninguna. La
@@ -490,12 +491,19 @@ export default function ListingDetail() {
     // Navegar por avisos no lo revela —son públicos—; la primera acción que
     // pide sesión, sí.
     if (!session?.supabase) {
-      toast({
-        title: "Inicia sesión para continuar",
-        description: `Necesitas una cuenta para ${motivo}.`,
-      });
-      navigate(`/auth?redirect=/aviso/${listing.id}`);
-      return;
+      // Antes de darlo por desconectado se le pregunta a Supabase: nuestro
+      // espejo local puede haberse quedado sin escribir aunque la sesión esté
+      // viva (ver `asegurarSesion`). Mandar al login a alguien autenticado es
+      // exactamente lo que se reportó como «me sacó de la sesión».
+      const real = await asegurarSesion();
+      if (!real) {
+        toast({
+          title: "Inicia sesión para continuar",
+          description: `Necesitas una cuenta para ${motivo}.`,
+        });
+        navigate(`/auth?redirect=/aviso/${listing.id}`);
+        return;
+      }
     }
     action();
   };

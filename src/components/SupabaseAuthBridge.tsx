@@ -5,10 +5,33 @@ import { syncSession, AccountBlockedError, isBlockingStaffLogin } from "@/lib/au
 import { clearSession, getSession } from "@/hooks/useSession";
 import { savePushToken, requestPushPermission } from "@/lib/push";
 
-// Sincroniza y, si la cuenta está bloqueada, avisa (syncSession ya cerró sesión).
-function safeSync() {
+/**
+ * Sincroniza y, si la cuenta está bloqueada, avisa (syncSession ya cerró sesión).
+ *
+ * REINTENTA los fallos pasajeros, y no es un lujo. `syncSession` lee el perfil y
+ * los roles; si esa lectura falla —un tropiezo de red, un arranque en frío de la
+ * base— lanza y NO escribe `effe_session`. Antes el error se tragaba aquí y no
+ * lo reintentaba nadie: el usuario quedaba autenticado en Supabase pero
+ * desconectado para la aplicación hasta el siguiente refresco de token, que
+ * puede tardar una hora. Con la barra enseñándolo como visitante y cada acción
+ * mandándolo al login.
+ *
+ * Un bloqueo de cuenta NO se reintenta: es una respuesta correcta, no un fallo.
+ */
+function safeSync(intento = 0) {
   syncSession().catch((e) => {
-    if (e instanceof AccountBlockedError) toast.error(e.message);
+    if (e instanceof AccountBlockedError) {
+      toast.error(e.message);
+      return;
+    }
+    // Tres intentos, separándose (1 s, 3 s, 9 s). Pasado eso se deja estar: si
+    // la base sigue sin contestar, insistir no arregla nada, y `asegurarSesion`
+    // vuelve a intentarlo en cuanto el usuario haga algo que necesite sesión.
+    if (intento < 3) {
+      window.setTimeout(() => safeSync(intento + 1), 1000 * 3 ** intento);
+    } else {
+      console.warn("[auth] no se pudo sincronizar la sesión tras varios intentos:", e);
+    }
   });
 }
 
