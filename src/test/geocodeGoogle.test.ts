@@ -16,6 +16,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const fetchMock = vi.fn();
 
+// El respaldo por Geocoding YA NO usa el servicio web: con una llave restringida
+// por dominio ese endpoint devuelve REQUEST_DENIED siempre (comprobado el
+// 2026-09-05). Ahora va por el geocodificador del SDK, que sí funciona con ella.
+// Ver `geocodeInversa.test.ts` y `cargarGeocodificador` en googleMaps.ts.
+const geocode = vi.fn();
+const cargarGeocodificador = vi.fn();
+vi.mock("@/lib/googleMaps", () => ({
+  cargarGeocodificador: (...a: unknown[]) => cargarGeocodificador(...a),
+}));
+
 async function cargar(conLlave = true) {
   vi.resetModules();
   vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", conLlave ? "llave-de-prueba" : "");
@@ -54,6 +64,8 @@ const PREDICCIONES = {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  geocode.mockReset();
+  cargarGeocodificador.mockReset().mockResolvedValue({ geocode: (...a: unknown[]) => geocode(...a) });
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -155,7 +167,8 @@ describe("respaldo cuando Places no está habilitada", () => {
   };
 
   it("si Places responde 403, busca por Geocoding", async () => {
-    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok(GEOCODING));
+    fetchMock.mockReturnValue(falla(403));
+    geocode.mockResolvedValue(GEOCODING);
     const { sugerirDirecciones } = await cargar();
 
     const rs = await sugerirDirecciones("mirafl");
@@ -163,11 +176,15 @@ describe("respaldo cuando Places no está habilitada", () => {
     expect(rs).toHaveLength(1);
     expect(rs[0].titulo).toBe("Miraflores");            // sin el ", Perú"
     expect(rs[0].detalle).toBe("Lima, Provincia de Lima");
-    expect(String(fetchMock.mock.calls[1][0])).toContain("maps/api/geocode/json");
+    // Y por el SDK, NO por el servicio web: ese está descartado a propósito.
+    expect(cargarGeocodificador).toHaveBeenCalled();
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.filter((u) => u.includes("maps/api/geocode/json"))).toEqual([]);
   });
 
   it("lo avisa por consola: es una red de seguridad, no la forma buena", async () => {
-    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok(GEOCODING));
+    fetchMock.mockReturnValue(falla(403));
+    geocode.mockResolvedValue(GEOCODING);
     const { sugerirDirecciones } = await cargar();
     await sugerirDirecciones("mirafl");
     expect(console.warn).toHaveBeenCalled();
@@ -175,16 +192,15 @@ describe("respaldo cuando Places no está habilitada", () => {
 
   it("si también falla el respaldo, devuelve vacío y no rompe la publicación", async () => {
     fetchMock.mockRejectedValue(new Error("sin red"));
+    geocode.mockRejectedValue(new Error("sin red"));
     const { sugerirDirecciones } = await cargar();
     expect(await sugerirDirecciones("mirafl")).toEqual([]);
   });
 
   it("dos resultados que se leerían igual se quedan en uno", async () => {
     const repetido = GEOCODING.results[0];
-    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok({
-      status: "OK",
-      results: [repetido, { ...repetido, place_id: "otro" }],
-    }));
+    fetchMock.mockReturnValue(falla(403));
+    geocode.mockResolvedValue({ results: [repetido, { ...repetido, place_id: "otro" }] });
     const { sugerirDirecciones } = await cargar();
     expect(await sugerirDirecciones("mirafl")).toHaveLength(1);
   });

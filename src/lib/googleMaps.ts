@@ -84,9 +84,56 @@ export function cargarMapas(): Promise<LibreriasDelMapa> {
   return enCurso;
 }
 
+/**
+ * El geocodificador DEL SDK, no el servicio web.
+ *
+ * ── POR QUÉ NO SE USA `maps.googleapis.com/maps/api/geocode/json` ────────────
+ *
+ * Porque con nuestra llave NO FUNCIONA, y falla en silencio. Comprobado contra
+ * el servicio real el 2026-09-05:
+ *
+ *     REQUEST_DENIED
+ *     "API keys with referer restrictions cannot be used with this API."
+ *
+ * Es una propiedad de la LLAVE, no de la petición: da igual el dominio, la
+ * cabecera `Referer` o el punto que se consulte —dentro o fuera del Perú, la
+ * respuesta es siempre la misma—. Google no admite llaves restringidas por
+ * dominio en ese servicio web, y restringir la llave del navegador por dominio
+ * es justo lo que hay que hacer con una llave que va horneada en el bundle.
+ *
+ * El geocodificador del SDK sí funciona con ella, porque va por el mismo canal
+ * que el mapa. Misma información, misma facturación, otra puerta.
+ *
+ * Lo que rompía: al tocar el mapa, el aviso se quedaba SIEMPRE sin departamento
+ * y sin país, y el formulario respondía «No pudimos identificar esa zona». En el
+ * Perú se disimulaba —el anunciante elegía el departamento a mano y seguía—;
+ * fuera era un muro, porque el país nunca cambiaba y se le seguía pidiendo un
+ * departamento peruano para un aviso en Madrid.
+ */
+let geocodificador: Promise<google.maps.Geocoder> | null = null;
+
+export function cargarGeocodificador(): Promise<google.maps.Geocoder> {
+  if (!hayMapasDeGoogle()) {
+    return Promise.reject(new Error("Falta VITE_GOOGLE_MAPS_API_KEY"));
+  }
+  if (!geocodificador) {
+    // `setOptions` ya lo deja puesto `cargarMapas`; se repite por si alguien
+    // geocodifica antes de que se monte ningún mapa.
+    setOptions({ key: LLAVE, v: "weekly", language: "es", region: "PE" });
+    geocodificador = importLibrary("geocoding")
+      .then((lib) => new lib.Geocoder())
+      .catch((e) => {
+        geocodificador = null;   // que el siguiente intento lo reintente
+        throw e;
+      });
+  }
+  return geocodificador;
+}
+
 /** Solo para las pruebas: olvida la carga anterior. */
 export function _reiniciarCargaDeMapas() {
   enCurso = null;
+  geocodificador = null;
   avisadoDelMapId = false;
 }
 

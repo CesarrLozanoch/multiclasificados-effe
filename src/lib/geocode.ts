@@ -19,6 +19,8 @@
 // se cierra pidiendo el detalle del lugar elegido. Sin ese identificador cada
 // tecla se cobraría por separado, que es la forma cara de hacer lo mismo.
 
+import { cargarGeocodificador } from "@/lib/googleMaps";
+
 const GOOGLE_KEY = import.meta.env?.VITE_GOOGLE_MAPS_API_KEY?.trim() || "";
 
 /** True si hay llave de Google configurada (para poder decirlo en la interfaz). */
@@ -273,20 +275,12 @@ export async function detalleDeLugar(placeId: string, sesion?: string): Promise<
   }
 }
 
-// ─── Geocoding API ────────────────────────────────────────────────────────────
-
-const GEOCODING = "https://maps.googleapis.com/maps/api/geocode/json";
-
-interface GeocodingRespuesta {
-  status?: string;
-  error_message?: string;
-  results?: Array<{
-    formatted_address?: string;
-    place_id?: string;
-    address_components?: Componente[];
-    geometry?: { location?: { lat?: number; lng?: number } };
-  }>;
-}
+// ─── Geocodificacion ──────────────────────────────────────────────────────────
+//
+// Va SIEMPRE por el geocodificador del SDK (`cargarGeocodificador`). El servicio
+// web `maps.googleapis.com/maps/api/geocode/json` esta descartado a proposito:
+// con una llave restringida por dominio responde REQUEST_DENIED siempre, y una
+// llave que viaja en el bundle del navegador TIENE que ir restringida.
 
 /** Grados de latitud/longitud que abarcan aproximadamente un radio en metros. */
 const gradosPara = (metros: number) => metros / 111_320;
@@ -299,35 +293,37 @@ const gradosPara = (metros: number) => metros / 111_320;
  */
 async function sugerenciasPorGeocoding(consulta: string, sesgo?: SesgoZona, pais?: string): Promise<Sugerencia[]> {
   try {
-    const url = new URL(GEOCODING);
-    url.searchParams.set("address", consulta);
-    url.searchParams.set("key", GOOGLE_KEY);
-    url.searchParams.set("language", "es");
+    // Por el SDK y no por `maps.googleapis.com/maps/api/geocode/json`: con una
+    // llave restringida por dominio ese servicio devuelve REQUEST_DENIED
+    // siempre. Ver `cargarGeocodificador` en googleMaps.ts.
+    const geocoder = await cargarGeocodificador();
     const codigo = (pais ?? "PE").toUpperCase();
-    url.searchParams.set("region", codigo.toLowerCase());
-    url.searchParams.set("components", `country:${codigo}`);
+    const peticion: google.maps.GeocoderRequest = {
+      address: consulta,
+      componentRestrictions: { country: codigo },
+      region: codigo.toLowerCase(),
+    };
     if (sesgo) {
       const d = gradosPara(sesgo.radioM ?? 15000);
-      url.searchParams.set(
-        "bounds",
-        `${sesgo.lat - d},${sesgo.lng - d}|${sesgo.lat + d},${sesgo.lng + d}`,
-      );
+      peticion.bounds = {
+        south: sesgo.lat - d, west: sesgo.lng - d,
+        north: sesgo.lat + d, east: sesgo.lng + d,
+      };
     }
 
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`Geocoding respondió ${res.status}`);
-    const data = (await res.json()) as GeocodingRespuesta;
-    if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      throw new Error(`Geocoding: ${data.status}`);
-    }
+    const { results } = await geocoder.geocode(peticion);
 
     const vistos = new Set<string>();
-    return (data.results ?? [])
+    return results
       .filter((r) => r.place_id)
       .map((r) => {
-        // "Miraflores, Perú" → "Miraflores": el país sobra, todo está en Perú.
+        // "Miraflores, Peru" -> "Miraflores": el pais sobra, todo esta en Peru.
         const titulo = (r.formatted_address || consulta).replace(/,\s*Per[úu]\s*$/i, "");
-        return { id: r.place_id!, titulo, detalle: contextoDe(r.address_components, titulo) };
+        return {
+          id: r.place_id,
+          titulo,
+          detalle: contextoDe(r.address_components as unknown as Componente[], titulo),
+        };
       })
       // Dos entradas que se leen exactamente igual no le sirven a nadie.
       .filter((s) => {
@@ -338,6 +334,7 @@ async function sugerenciasPorGeocoding(consulta: string, sesgo?: SesgoZona, pais
       })
       .slice(0, 5);
   } catch (e) {
+    // `ZERO_RESULTS` viene como excepcion y no es un fallo: no hay sugerencias.
     console.warn("[geocode] tampoco se pudo buscar por Geocoding:", e);
     return [];
   }
@@ -380,23 +377,20 @@ export async function ubicacionDeCoordenadas(lat: number, lng: number): Promise<
   const vacio: UbicacionDelPunto = { region: null, referencia: null, pais: null };
   if (!hayGoogleMaps()) return vacio;
 
-  const url = new URL(GEOCODING);
-  url.searchParams.set("latlng", `${lat},${lng}`);
-  url.searchParams.set("key", GOOGLE_KEY);
-  url.searchParams.set("language", "es");
-
   try {
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`Geocoding respondió ${res.status}`);
-    const data = (await res.json()) as GeocodingRespuesta;
-    if (data.status && data.status !== "OK") return vacio;
+    const geocoder = await cargarGeocodificador();
+    const { results } = await geocoder.geocode({ location: { lat, lng } });
 
-    // Se juntan los componentes de TODOS los resultados, del más específico al
-    // más general: el primer resultado puede ser un portal sin distrito.
-    const todos = (data.results ?? []).flatMap((r) => r.address_components ?? []);
-    return interpretarComponentes(todos);
+    // Se juntan los componentes de TODOS los resultados, del mas especifico al
+    // mas general: el primero puede ser un portal sin distrito.
+    const todos = results.flatMap((r) => r.address_components ?? []);
+    // El SDK usa `long_name`/`short_name`; `interpretarComponentes` entiende esa
+    // forma ademas de la de Places (`longText`/`shortText`).
+    return interpretarComponentes(todos as unknown as Componente[]);
   } catch (e) {
-    console.warn("[geocode] no se pudo identificar la ubicación del punto:", e);
+    // `ZERO_RESULTS` llega aqui como excepcion: en medio del mar no hay nada que
+    // decir, y eso no es un error que haya que gritar.
+    console.warn("[geocode] no se pudo identificar la ubicacion del punto:", e);
     return vacio;
   }
 }
