@@ -80,6 +80,22 @@ function ponerMeta(html: string, atributo: "property" | "name", clave: string, v
   );
 }
 
+/**
+ * Deja puesto el <link rel="canonical"> de la página.
+ *
+ * Dice cuál es LA dirección buena de este aviso. Hace falta porque la misma
+ * ficha se alcanza por muchas direcciones distintas: con `?utm_source=` de una
+ * campaña, con el `?fbclid=` que añade Facebook al compartir, con y sin `www`.
+ * Para un buscador eso son páginas distintas con el mismo contenido, y el valor
+ * se reparte entre todas en vez de acumularse en una.
+ */
+function ponerCanonical(html: string, enlace: string): string {
+  const re = /<link\s+rel=["']canonical["'][^>]*>/i;
+  const etiqueta = `<link rel="canonical" href="${escapar(enlace)}" />`;
+  if (re.test(html)) return html.replace(re, etiqueta);
+  return html.replace(/<\/head>/i, `  ${etiqueta}\n</head>`);
+}
+
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const id = url.searchParams.get("id") ?? "";
@@ -133,6 +149,12 @@ export default async function handler(req: Request): Promise<Response> {
   html = ponerMeta(html, "property", "og:type", "article");
   html = ponerMeta(html, "name", "twitter:title", titulo);
   html = ponerMeta(html, "name", "twitter:description", descripcion);
+  // La descripción NORMAL, que es distinta de `og:description`: las etiquetas
+  // `og:` las leen WhatsApp y las redes para pintar su tarjeta; esta es la que
+  // usa un buscador como resumen en sus resultados. Sin ella, el aviso salía en
+  // Google descrito con el texto genérico de la plataforma, igual que todos.
+  html = ponerMeta(html, "name", "description", descripcion);
+  html = ponerCanonical(html, enlace);
 
   // Sin foto se deja la imagen por defecto del sitio: una tarjeta con un hueco
   // roto se ve peor que una con el logo.

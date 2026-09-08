@@ -6,7 +6,11 @@
       "destination": "/api/og-aviso?id=:id"
     },
     {
-      "source": "/((?!assets/|api/|sw\\.js|version\\.json|manifest\\.webmanifest|sin-conexion\\.html).*)",
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/((?!assets/|api/|sw\\.js|sitemap\\.xml|version\\.json|manifest\\.webmanifest|sin-conexion\\.html).*)",
       "destination": "/index.html"
     }
   ],

@@ -1,14 +1,59 @@
+# Qué puede rastrear un buscador, y dónde está la lista de lo que hay.
+#
+# OJO con lo que significa "Disallow": pide que NO SE RASTREE, no que no se
+# indexe ni que sea privado. Lo privado lo protege la sesión y las políticas de
+# la base de datos, no este fichero — que además es público y lo lee cualquiera.
+# Lo que se consigue aquí es que el buscador no gaste su tiempo en páginas que
+# no tienen nada que enseñar, y que no acaben apareciendo en resultados.
+
+User-agent: *
+Allow: /
+
+# Zonas privadas o sin contenido indexable.
+# · /dashboard/ y /admin  → detrás de sesión; un buscador solo vería el login
+# · /auth y /reset-password → formularios, y no queremos el login en resultados
+# · /pay                  → pantalla de pago, siempre ligada a una orden concreta
+Disallow: /dashboard/
+Disallow: /admin
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /pay
+
+# Los parámetros de búsqueda multiplican la misma página por cada combinación de
+# filtros. Se deja pasar /buscar, pero no sus infinitas variantes.
+Disallow: /buscar?
+
+# Explícito para los principales, que además de rastrear generan las vistas
+# previas de los enlaces compartidos.
 User-agent: Googlebot
 Allow: /
+Disallow: /dashboard/
+Disallow: /admin
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /pay
 
 User-agent: Bingbot
 Allow: /
+Disallow: /dashboard/
+Disallow: /admin
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /pay
 
+# Estos NO rastrean para indexar: leen las etiquetas <meta> para pintar la
+# tarjeta de vista previa cuando alguien comparte un aviso. Sin acceso, el
+# enlace compartido sale sin foto ni título (ver api/og-aviso.ts).
 User-agent: Twitterbot
 Allow: /
 
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
+User-agent: WhatsApp
 Allow: /
+
+# El mapa del sitio se genera al vuelo (api/sitemap.ts) porque los avisos se
+# publican y vencen a diario; uno estático estaría desactualizado al día
+# siguiente y mandaría al buscador a avisos que ya no existen.
+Sitemap: https://www.coleffe.com/sitemap.xml
