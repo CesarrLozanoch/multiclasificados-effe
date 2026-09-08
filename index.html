@@ -101,6 +101,13 @@
          aviso legible en vez del splash pegado. Script externo de 'self' (cumple
          la CSP) e independiente del bundle. Ver public/boot-watchdog.js -->
     <script defer src="/boot-watchdog.js"></script>
+    <!-- Etiqueta de Google (Google Ads AW-18417687234). El código que entrega
+         Google trae un <script> EN LÍNEA que nuestra CSP bloquea; por eso va en
+         un fichero externo de 'self', igual que font-boot.js. Y por eso no está
+         pegado aquí: gtag-init.js decide además no cargarlo fuera de
+         coleffe.com, para no ensuciar las conversiones con el desarrollo, las
+         vistas previas y el APK. -->
+    <script defer src="/gtag-init.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
