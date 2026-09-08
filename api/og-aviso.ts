@@ -34,6 +34,9 @@ interface Aviso {
   location: string | null;
   image_url: string | null;
   status: string | null;
+  /** ISO alpha-2. Distingue una oferta de otra cuando el mismo producto se
+   *  anuncia en varios países. */
+  country: string | null;
 }
 
 /** Escapa lo que va dentro de un atributo HTML. El título lo escribe el
@@ -96,6 +99,40 @@ function ponerCanonical(html: string, enlace: string): string {
   return html.replace(/<\/head>/i, `  ${etiqueta}\n</head>`);
 }
 
+/**
+ * Datos estructurados (JSON-LD) del aviso.
+ *
+ * ── PARA QUÉ ─────────────────────────────────────────────────────────────────
+ *
+ * Le dice a un buscador QUÉ es esta página en vez de dejar que lo adivine del
+ * texto: que es un producto, a qué precio, en qué moneda y en qué sitio. Es lo
+ * que permite que el precio salga directamente en los resultados.
+ *
+ * Aquí importa más de lo normal. El mismo producto está anunciado en decenas de
+ * países con el mismo título, la misma descripción y la misma foto: para Google
+ * eso son páginas casi idénticas y se queda con una. Marcando cada una como una
+ * OFERTA con su lugar, la diferencia deja de estar solo en una palabra del
+ * título.
+ *
+ * ── POR QUÉ ESTE <script> SÍ PUEDE IR EN LÍNEA ───────────────────────────────
+ *
+ * Nuestra CSP prohíbe los scripts en línea, y por eso la etiqueta de Google vive
+ * en un fichero aparte (public/gtag-init.js). Este es la excepción: con
+ * `type="application/ld+json"` el navegador NO lo ejecuta —es un bloque de
+ * datos, no código— así que `script-src` no lo bloquea. Comprobado en el sitio
+ * ya desplegado: ni una violación en consola.
+ */
+function ponerJsonLd(html: string, datos: Record<string, unknown>): string {
+  // Lo único que puede romper esto es un `</script>` dentro de un texto que
+  // escribe el anunciante: cerraría la etiqueta antes de tiempo y el resto del
+  // JSON se pintaría como HTML. Escapando `<` deja de ser posible.
+  const json = JSON.stringify(datos).replace(/</g, "\\u003c");
+  return html.replace(
+    /<\/head>/i,
+    `  <script type="application/ld+json">${json}</script>\n</head>`,
+  );
+}
+
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const id = url.searchParams.get("id") ?? "";
@@ -122,7 +159,7 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/listing_cards?id=eq.${id}` +
-        `&select=title,description,price,currency,location,image_url,status&limit=1`,
+        `&select=title,description,price,currency,location,image_url,status,country&limit=1`,
       { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${SUPABASE_ANON_KEY}` } },
     );
     if (r.ok) aviso = ((await r.json()) as Aviso[])[0] ?? null;
@@ -149,11 +186,22 @@ export default async function handler(req: Request): Promise<Response> {
   html = ponerMeta(html, "property", "og:type", "article");
   html = ponerMeta(html, "name", "twitter:title", titulo);
   html = ponerMeta(html, "name", "twitter:description", descripcion);
-  // La descripción NORMAL, que es distinta de `og:description`: las etiquetas
-  // `og:` las leen WhatsApp y las redes para pintar su tarjeta; esta es la que
-  // usa un buscador como resumen en sus resultados. Sin ella, el aviso salía en
-  // Google descrito con el texto genérico de la plataforma, igual que todos.
-  html = ponerMeta(html, "name", "description", descripcion);
+  // La descripción NORMAL, distinta de `og:description`. Las `og:` las leen
+  // WhatsApp y las redes para pintar su tarjeta; ESTA es la que usa un buscador
+  // como resumen en sus resultados. Sin ella el aviso salía en Google descrito
+  // con el texto genérico de la plataforma, igual que todos.
+  //
+  // Y lleva el LUGAR delante, que en las `og:` no hace falta —ahí el título va
+  // justo encima—. Aquí sí, por un motivo concreto de este sitio: el mismo
+  // producto está anunciado en decenas de países con el mismo texto, y sin el
+  // lugar las fichas se leen idénticas en la lista de resultados.
+  const lugar = aviso.location?.trim();
+  html = ponerMeta(
+    html,
+    "name",
+    "description",
+    lugar ? `${lugar}. ${descripcion}` : descripcion,
+  );
   html = ponerCanonical(html, enlace);
 
   // Sin foto se deja la imagen por defecto del sitio: una tarjeta con un hueco
@@ -165,6 +213,43 @@ export default async function handler(req: Request): Promise<Response> {
   // Y el <title>, que es lo que se ve en la pestaña y lo que usan algunos
   // lectores cuando no encuentran og:title.
   html = html.replace(/<title>[^<]*<\/title>/i, `<title>${escapar(titulo)}</title>`);
+
+  // Los datos estructurados. Los campos `undefined` se caen solos al
+  // serializar, así que lo que no tenemos no aparece — mejor que declararlo
+  // vacío, que Google lo señala como error.
+  const precioNum = typeof aviso.price === "number" && aviso.price > 0 ? aviso.price : null;
+  const sitio = (lugar || aviso.country)
+    ? {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: lugar || undefined,
+          addressCountry: aviso.country || undefined,
+        },
+      }
+    : undefined;
+  html = ponerJsonLd(html, {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: aviso.title?.trim() || "Aviso",
+    description: descripcion,
+    image: aviso.image_url || undefined,
+    url: enlace,
+    offers: precioNum
+      ? {
+          "@type": "Offer",
+          price: precioNum.toFixed(2),
+          priceCurrency: (aviso.currency || "PEN").toUpperCase(),
+          // Un clasificado está disponible mientras el aviso siga activo, y
+          // aquí ya se ha comprobado que lo está.
+          availability: "https://schema.org/InStock",
+          url: enlace,
+          // El lugar es lo que distingue una oferta de otra cuando el mismo
+          // producto se anuncia en decenas de países.
+          availableAtOrFrom: sitio,
+        }
+      : undefined,
+  });
 
   return responder();
 }

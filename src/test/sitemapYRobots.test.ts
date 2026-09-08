@@ -119,7 +119,33 @@ describe("la ficha de un aviso se presenta bien en un buscador", () => {
     // Las `og:` las leen WhatsApp y las redes; el resumen de Google sale de
     // `<meta name="description">`. Sin ella todos los avisos salían descritos
     // con el texto genérico de la plataforma.
-    expect(OG).toContain('ponerMeta(html, "name", "description"');
+    // Sin atarse al formato: la llamada está repartida en varias líneas.
+    expect(OG).toMatch(/"name",\s*"description"/);
+  });
+
+  it("la descripción de resultados lleva el LUGAR delante", () => {
+    // El mismo producto está anunciado en decenas de países con el mismo texto.
+    // Sin el lugar, las fichas se leen idénticas en la lista de resultados y
+    // Google se queda con una.
+    expect(OG).toMatch(/lugar \? `\$\{lugar\}\. \$\{descripcion\}`/);
+  });
+
+  it("🔴 marca el aviso como Product con su Offer, precio y lugar", () => {
+    // Es lo que permite que el precio salga en los resultados, y lo que
+    // distingue una oferta de otra cuando el producto es el mismo.
+    expect(OG).toContain("application/ld+json");
+    expect(OG).toContain('"@type": "Product"');
+    expect(OG).toContain('"@type": "Offer"');
+    expect(OG).toContain("priceCurrency");
+    expect(OG).toContain("availableAtOrFrom");
+    expect(OG).toContain("addressCountry");
+  });
+
+  it("y el JSON no se puede escapar de su etiqueta", () => {
+    // Un `</script>` dentro de un texto que escribe el anunciante cerraría la
+    // etiqueta antes de tiempo y el resto del JSON se pintaría como HTML.
+    expect(OG).toContain("JSON.stringify(datos).replace");
+    expect(OG).toContain("u003c");
   });
 
   it("y un canonical, para que las variantes de la URL no se repartan el valor", () => {
