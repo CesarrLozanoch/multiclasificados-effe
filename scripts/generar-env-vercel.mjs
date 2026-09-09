@@ -55,9 +55,13 @@ const VARS = [
     clave: "VITE_IZIPAY_PUBLIC_KEY",
     nota: "Clave PÚBLICA de Izipay (Back Office → Configuración › Tienda › Claves de API REST).",
     aviso:
-      "Si el valor lleva «testpublickey» es la clave de PRUEBAS. Los cobros funcionan\n" +
-      "# igual —quién cobra lo decide la clave del servidor, que está en Supabase— pero\n" +
-      "# deja un aviso en la consola del navegador.",
+      "Si el valor lleva «testpublickey» es la clave de PRUEBAS, y es la que hay hoy en\n" +
+      "# producción (comprobado el 9-sep-2026 leyéndola del bundle de coleffe.com).\n" +
+      "#\n" +
+      "# Los cobros son REALES de todos modos: quién cobra lo decide la clave del\n" +
+      "# SERVIDOR, que vive como secret en Supabase y esa sí es de producción. Esta solo\n" +
+      "# inicializa el formulario en el navegador. Conviene cambiarla por la de\n" +
+      "# producción del Back Office, pero no está bloqueando nada.",
   },
   {
     clave: "VITE_IZIPAY_STATIC_ENDPOINT",
@@ -67,8 +71,11 @@ const VARS = [
     clave: "VITE_GOOGLE_MAPS_API_KEY",
     nota: "Maps JavaScript API + Places (New).",
     aviso:
-      "Debe estar restringida por dominio en Google Cloud. Sin restringir, cualquiera\n" +
-      "# puede usarla y la factura es nuestra.",
+      "Tiene que estar restringida por dominio en Google Cloud — y lo está (comprobado:\n" +
+      "# el web service de Geocoding la rechaza, que es exactamente lo que hace con las\n" +
+      "# llaves restringidas por referer; por eso el geocodificador va por el SDK).\n" +
+      "# Si algún día se sustituye por otra, restringirla ANTES de ponerla aquí: sin\n" +
+      "# restringir, cualquiera puede usarla y la factura es nuestra.",
   },
   {
     clave: "VITE_GOOGLE_MAPS_MAP_ID",
