@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban, Search, FileSpreadsheet, Download } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
+import { resumenDeObservaciones } from "@/lib/observacionesSunat";
 import { personKindLabel } from "@/lib/identity";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
@@ -233,26 +234,26 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
   }
 
   const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
-  // Un «observado» está aceptado, pero con algo que SUNAT quiso señalar. Lo que
-  // hay que leer entonces es la observación, no el `sunatError` — que en esas
-  // filas dice «ha sido aceptada» y contradice la etiqueta ámbar.
-  const observaciones = inv.sunatNotas?.length ? inv.sunatNotas : null;
+  // Un «observado» está ACEPTADO, con algo que SUNAT quiso señalar. En esta
+  // celda cabe una línea, así que solo se dice eso; el texto de la observación
+  // —que es una traza de XML— va en el modal «Ver», junto al resto del detalle.
+  //
+  // Y el `title` no puede ser el `sunatError`: en estas filas dice «ha sido
+  // aceptada», que contradice la etiqueta ámbar y confunde a quien la lee.
+  const resumen = resumenDeObservaciones(inv.sunatNotas ?? []);
   return (
     <div className="flex flex-col gap-1 items-center">
       <span
         className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap", s.clase)}
-        title={observaciones?.join("\n") ?? inv.sunatError ?? undefined}
+        title={resumen ?? inv.sunatError ?? undefined}
       >
         {s.texto}
       </span>
-      {observaciones && (
-        // Visible, no solo en el tooltip: en el móvil no hay tooltip, y una
-        // etiqueta ámbar que no se puede interpretar acaba ignorándose.
-        <span
-          className="max-w-[16rem] text-[10px] leading-tight text-amber-800 dark:text-amber-200"
-          title={observaciones.join("\n")}
-        >
-          {observaciones.join(" · ")}
+      {resumen && (
+        // Lo esencial de un «observado» es que SÍ se emitió: la etiqueta ámbar
+        // sola se lee como un fallo. El porqué está a un clic, en «Ver».
+        <span className="text-[10px] leading-tight text-muted-foreground" title={resumen}>
+          emitida, con aviso
         </span>
       )}
       {inv.emailStatus === "error" && (

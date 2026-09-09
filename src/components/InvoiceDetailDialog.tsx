@@ -2,9 +2,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { FileText, Info } from "lucide-react";
 import { formatSoles } from "@/lib/pricing";
 import { personKindLabel, docKindLabel, factilizaRows } from "@/lib/identity";
+import { leerObservaciones } from "@/lib/observacionesSunat";
 
 // Datos mínimos comunes a la boleta del usuario (DbInvoice) y del admin (AdminInvoice).
 export interface InvoiceDetailData {
@@ -22,6 +23,15 @@ export interface InvoiceDetailData {
   anuladoAt?: string | null;
   anuladoMotivo?: string | null;
   notaNumber?: string | null;
+  /**
+   * Observaciones que SUNAT dejó en el CDR al aceptar el comprobante.
+   *
+   * Opcional a propósito: esto es un asunto interno (suele hablar de la
+   * configuración del emisor, no de la venta) y solo lo pasa el panel de
+   * administración. Al anunciante no le aporta nada y la palabra «observado»
+   * le haría pensar que su comprobante tiene un problema — no lo tiene.
+   */
+  sunatNotas?: string[] | null;
 }
 
 // Modal "Ver": muestra TODOS los datos del comprobante, incluidos los traídos de
@@ -52,6 +62,8 @@ export function InvoiceDetailDialog({ invoice, onClose }: { invoice: InvoiceDeta
       ]
     : [];
 
+  const observaciones = leerObservaciones(invoice?.sunatNotas ?? []);
+
   return (
     <Dialog open={!!invoice} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
@@ -73,6 +85,45 @@ export function InvoiceDetailDialog({ invoice, onClose }: { invoice: InvoiceDeta
               <span className="text-xs uppercase tracking-wide text-muted-foreground">Monto</span>
               <span className="text-base font-extrabold text-primary">{formatSoles(invoice.amount)}</span>
             </div>
+          </div>
+        )}
+
+        {/* Las observaciones de SUNAT, si las hubo. Van fuera de la lista de
+            datos y al final: no son un dato del comprobante, son una nota sobre
+            su emisión, y quien abre este modal viene casi siempre a mirar otra
+            cosa. */}
+        {observaciones.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-left
+                          dark:border-amber-900 dark:bg-amber-950/40">
+            <p className="flex items-start gap-2 text-sm font-semibold text-amber-900 dark:text-amber-100">
+              <Info size={15} className="mt-0.5 shrink-0" />
+              {/* Lo primero, y en negrita: se emitió. La etiqueta ámbar de la
+                  tabla, sola, se lee como un fallo. */}
+              Emitida y aceptada por SUNAT, con {observaciones.length === 1 ? "una observación" : `${observaciones.length} observaciones`}
+            </p>
+            <ul className="mt-2 space-y-2">
+              {observaciones.map((o) => (
+                <li key={o.crudo}>
+                  <p className="text-sm text-amber-900 dark:text-amber-100">
+                    {o.resumen}
+                    {o.codigo && (
+                      <span className="ml-1 text-xs font-normal opacity-60">(código {o.codigo})</span>
+                    )}
+                  </p>
+                  {o.explicacion && (
+                    <p className="mt-0.5 text-xs leading-snug text-amber-800/90 dark:text-amber-200/80">
+                      {o.explicacion}
+                    </p>
+                  )}
+                  {/* El texto original, para quien tenga que reclamarlo o
+                      buscarlo en el catálogo de SUNAT. Pequeño y monoespaciado:
+                      está disponible sin robarle sitio a lo que se entiende. */}
+                  <p className="mt-1 break-words font-mono text-[10px] leading-tight text-amber-700/70 dark:text-amber-300/50">
+                    {o.crudo}
+                  </p>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         <DialogFooter>

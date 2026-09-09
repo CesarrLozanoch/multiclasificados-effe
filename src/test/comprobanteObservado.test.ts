@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { leerObservacion, resumenDeObservaciones } from "@/lib/observacionesSunat";
 
 /**
  * Un comprobante «observado» y por qué lo está.
@@ -99,21 +100,96 @@ describe("el panel sabe qué se observó", () => {
   });
 });
 
-describe("y las enseña", () => {
+describe("y las dice en cristiano", () => {
+  it("🔴 no se enseña la traza de XML: se dice qué pasó", () => {
+    const o = leerObservacion(NOTA_INFO);
+    expect(o.codigo).toBe("4092");
+    // Ni «cac:PartyName», ni «cbc:Name», ni «INFO:». Nada de eso significa algo
+    // para quien mira el panel.
+    expect(o.resumen).not.toMatch(/cac:|cbc:|INFO:|nodo/);
+    expect(o.resumen).toBe("Falta el nombre comercial de la empresa emisora");
+    // Y se dice de quién es el problema, que es lo que decide qué hacer.
+    expect(o.explicacion).toMatch(/Factiliza/);
+  });
+
+  it("pero el texto original NO se pierde", () => {
+    // Hace falta para reclamar a Factiliza o buscar el código en el catálogo
+    // de SUNAT. Se guarda entero; solo deja de ser lo primero que se ve.
+    expect(leerObservacion(NOTA_INFO).crudo).toBe(NOTA_INFO);
+  });
+
+  it("una nota que no conocemos se limpia, no se inventa", () => {
+    const o = leerObservacion(
+      '4267 - El dato ingresado no cumple con el formato - INFO: 4267 (nodo: "cbc:Note")',
+    );
+    expect(o.codigo).toBe("4267");
+    expect(o.resumen).toBe("El dato ingresado no cumple con el formato");
+    // No hay explicación inventada para un código que no hemos visto: decir
+    // algo falso sobre un documento fiscal es peor que no decir nada.
+    expect(o.explicacion).toBeNull();
+  });
+
+  it("y ante un texto raro, se enseña tal cual antes que perderlo", () => {
+    for (const [raro, esperado] of [
+      ["", ""],
+      ["   ", ""],
+      // Sí se le pone la mayúscula inicial: es una frase, no un identificador.
+      ["algo sin código ni cola", "Algo sin código ni cola"],
+    ]) {
+      const o = leerObservacion(raro);
+      expect(o.resumen).toBe(esperado);
+      expect(o.crudo).toBe(raro.trim());
+      expect(o.codigo).toBeNull();
+    }
+  });
+
+  it("el resumen dice PRIMERO que sí se emitió", () => {
+    // La etiqueta ámbar, sola, se lee como un fallo. Y no lo es: está aceptada.
+    const r = resumenDeObservaciones([NOTA_INFO])!;
+    expect(r).toMatch(/^Emitida y aceptada por SUNAT/);
+    expect(r).toContain("una observación");
+    expect(resumenDeObservaciones([NOTA_INFO, "4267 - Otra cosa"])).toContain("2 observaciones");
+    expect(resumenDeObservaciones([])).toBeNull();
+  });
+});
+
+describe("y las coloca donde caben", () => {
   const PANEL = fs.readFileSync(
     path.resolve(__dirname, "../pages/admin/AdminCommercial.tsx"),
     "utf8",
   );
+  const MODAL = fs.readFileSync(
+    path.resolve(__dirname, "../components/InvoiceDetailDialog.tsx"),
+    "utf8",
+  );
 
-  it("🔴 la observación se ve, no solo en el tooltip", () => {
-    // En el móvil no hay tooltip. Una etiqueta ámbar que no se puede
-    // interpretar acaba ignorándose, que es justo lo que se quiere evitar.
-    expect(PANEL).toContain("inv.sunatNotas");
-    expect(PANEL).toMatch(/\{observaciones\.join\(" · "\)\}/);
+  it("🔴 en la celda NO se vuelca el texto de SUNAT", () => {
+    // Cabía una línea y se metieron cinco de jerga de XML: la fila se deformó y
+    // encima no se entendía. En la celda va lo esencial; el detalle, en «Ver».
+    expect(PANEL).not.toMatch(/sunatNotas\.join/);
+    expect(PANEL).not.toMatch(/observaciones\.join/);
+    expect(PANEL).toContain("emitida, con aviso");
   });
 
-  it("y desplaza al `sunatError`, que ahí dice lo contrario", () => {
-    expect(PANEL).toMatch(/observaciones\?\.join\("\\n"\) \?\? inv\.sunatError/);
+  it("y el `title` ya no dice lo contrario que la etiqueta", () => {
+    // `sunatError` en estas filas dice «ha sido aceptada» junto a una etiqueta
+    // ámbar. El resumen manda; el `sunatError` queda de reserva.
+    expect(PANEL).toMatch(/title=\{resumen \?\? inv\.sunatError/);
+  });
+
+  it("🔴 el detalle vive en el modal «Ver»", () => {
+    expect(MODAL).toContain("leerObservaciones");
+    expect(MODAL).toContain("sunatNotas");
+    // Con las tres capas: qué pasó, qué significa y el texto original.
+    expect(MODAL).toContain("o.resumen");
+    expect(MODAL).toContain("o.explicacion");
+    expect(MODAL).toContain("o.crudo");
+  });
+
+  it("y al anunciante no se le enseña: es un asunto interno", () => {
+    // La observación habla de la configuración del emisor, no de su compra.
+    // «Observado» le haría pensar que su comprobante tiene un problema.
+    expect(MODAL).toMatch(/sunatNotas\?: string\[\] \| null;/);
   });
 
   it("un observado NO cuenta como comprobante con problema", () => {
