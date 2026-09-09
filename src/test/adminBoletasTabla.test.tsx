@@ -35,6 +35,7 @@ const invoice = {
   emailStatus: "enviado",
   needsReview: false,
   sunatError: null,
+  sunatNotas: [],
   sunatAttempts: 1,
   esPrueba: false,
   anuladoAt: null,

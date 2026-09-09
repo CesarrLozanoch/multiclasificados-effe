@@ -638,7 +638,13 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
     p_cdr_zip: r.cdrZip,
     p_error_code: r.codigo,
     p_error_message: r.desenlace === "aceptado" ? null : r.mensaje,
-    p_needs_review: r.desenlace === "rechazado" || r.desenlace === "observado",
+    // Un rechazo siempre se mira. Un «observado» solo si alguna nota de SUNAT
+    // dice algo de ESTE comprobante: las puramente informativas (`soloInfo`)
+    // hablan del perfil del emisor, se repiten idénticas en todos y no se
+    // arreglan reemitiendo. Marcarlas todas enseña a ignorar el aviso, y el día
+    // que llegue uno de verdad nadie lo mirará. La nota queda igual en el CDR.
+    p_needs_review: r.desenlace === "rechazado" ||
+      (r.desenlace === "observado" && r.soloInfo !== true),
     // Esperar en su cola no es fallar: no gasta intento ni manda nada a revisión.
     p_espera: r.esperando === true,
   });

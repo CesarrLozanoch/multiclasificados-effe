@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   construirComprobante, leerRespuesta, montoEnLetras, fechaEmisionPeru,
+  soloSonInformativas,
   construirNotaDeCredito, ComprobanteInvalido,
   type DatosDelComprobante, type DatosDeLaNota,
 } from "../../supabase/functions/_shared/factiliza.ts";
@@ -312,6 +314,81 @@ describe("interpretar lo que contesta Factiliza", () => {
       },
     });
     expect(r.desenlace).toBe("observado");
+    // Esa nota NO lleva el marcador `INFO:`: habla del documento, así que sale
+    // a revisión.
+    expect(r.soloInfo).toBeUndefined();
+  });
+
+  /**
+   * La diferencia entre «aceptado con un aviso» y «aceptado con un problema».
+   *
+   * Caso real: las tres primeras facturas de producción (F001-1..3) salieron
+   * `observado` con esta nota, y las tres estaban perfectamente aceptadas por
+   * SUNAT (`code: "0"`). Lo que SUNAT señalaba era el NOMBRE COMERCIAL DEL
+   * EMISOR, un dato del perfil de la empresa en Factiliza — ni siquiera algo
+   * que viaje en nuestro cuerpo de la petición.
+   *
+   * Esa nota va a repetirse idéntica en cada factura hasta que alguien rellene
+   * ese campo, y no se arregla reemitiendo: reemitir una aceptada solo quemaría
+   * correlativos. Si cada una llama a revisión manual, la lista de pendientes
+   * se llena de ruido y el día que aparezca una nota sobre un importe nadie la
+   * va a mirar.
+   */
+  it("pero una nota meramente informativa no saca a nadie a revisar", () => {
+    const nota =
+      '4092 - El nombre comercial del emisor no cumple con el formato ' +
+      'establecido - INFO: 4092 (nodo: "cac:PartyName/cbc:Name" valor: "-")';
+    const r = leerRespuesta(200, {
+      ...aceptado,
+      data: {
+        ...aceptado.data,
+        sunatResponse: {
+          ...aceptado.data.sunatResponse,
+          cdrResponse: { ...aceptado.data.sunatResponse.cdrResponse, notes: [nota] },
+        },
+      },
+    });
+
+    // Sigue siendo «observado» y la nota sigue guardándose: no se esconde nada,
+    // solo se decide a quién se molesta.
+    expect(r.desenlace).toBe("observado");
+    expect((r.cdr as { notes: string[] }).notes).toEqual([nota]);
+    expect(r.soloInfo).toBe(true);
+  });
+
+  it("🔴 si UNA sola nota no es informativa, se revisa igual", () => {
+    // El error caro sería mirar solo la primera nota, o conformarse con que
+    // «alguna» sea informativa. Basta una que hable del documento.
+    const r = leerRespuesta(200, {
+      ...aceptado,
+      data: {
+        ...aceptado.data,
+        sunatResponse: {
+          ...aceptado.data.sunatResponse,
+          cdrResponse: {
+            ...aceptado.data.sunatResponse.cdrResponse,
+            notes: [
+              'INFO: 4092 (nodo: "cac:PartyName/cbc:Name" valor: "-")',
+              "4267 - El dato ingresado no cumple con el formato",
+            ],
+          },
+        },
+      },
+    });
+    expect(r.desenlace).toBe("observado");
+    expect(r.soloInfo).toBeUndefined();
+  });
+
+  it("y ante cualquier duda, se revisa", () => {
+    // Notas que no son texto, o una lista vacía que aun así llegó hasta aquí:
+    // no se puede afirmar que sean informativas, así que no se afirma.
+    expect(soloSonInformativas([])).toBe(false);
+    expect(soloSonInformativas([{ codigo: 4092, texto: "INFO: algo" }])).toBe(false);
+    expect(soloSonInformativas([null])).toBe(false);
+    // Y «informativo» escrito de cualquier otra forma no cuenta: el marcador es
+    // el literal que pone SUNAT.
+    expect(soloSonInformativas(["4092 - informativo, no pasa nada"])).toBe(false);
+    expect(soloSonInformativas(["4092 - lo que sea - INFO: 4092"])).toBe(true);
   });
 
   it("un 500 sí se reintenta: no es culpa del documento", () => {
@@ -730,5 +807,25 @@ describe("la nota de crédito", () => {
     expect(() => nota({ total: 0 })).toThrow(ComprobanteInvalido);
     expect(() => nota({ total: -5 })).toThrow(ComprobanteInvalido);
     expect(() => nota({ afectado: { tipo: "boleta", numero: "" } })).toThrow(ComprobanteInvalido);
+  });
+});
+
+/**
+ * El eslabón que une lo anterior con la realidad.
+ *
+ * `soloSonInformativas` no sirve de nada si quien decide `needs_review` no lo
+ * consulta. Y eso vive en otro fichero (la Edge Function), así que se comprueba
+ * sobre el código: es feo, pero es la única forma de que borrar esa condición
+ * rompa algo en vez de pasar desapercibido hasta la próxima factura.
+ */
+describe("quién marca para revisión", () => {
+  const EMIT = readFileSync(
+    new URL("../../supabase/functions/emit-invoice/index.ts", import.meta.url),
+    "utf8",
+  );
+
+  it("🔴 un rechazo siempre; un observado solo si la nota no es informativa", () => {
+    expect(EMIT).toContain('r.desenlace === "rechazado" ||');
+    expect(EMIT).toMatch(/r\.desenlace === "observado" && r\.soloInfo !== true/);
   });
 });

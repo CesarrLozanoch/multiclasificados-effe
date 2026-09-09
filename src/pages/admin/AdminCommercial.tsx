@@ -233,14 +233,28 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
   }
 
   const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
+  // Un «observado» está aceptado, pero con algo que SUNAT quiso señalar. Lo que
+  // hay que leer entonces es la observación, no el `sunatError` — que en esas
+  // filas dice «ha sido aceptada» y contradice la etiqueta ámbar.
+  const observaciones = inv.sunatNotas?.length ? inv.sunatNotas : null;
   return (
     <div className="flex flex-col gap-1 items-center">
       <span
         className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap", s.clase)}
-        title={inv.sunatError ?? undefined}
+        title={observaciones?.join("\n") ?? inv.sunatError ?? undefined}
       >
         {s.texto}
       </span>
+      {observaciones && (
+        // Visible, no solo en el tooltip: en el móvil no hay tooltip, y una
+        // etiqueta ámbar que no se puede interpretar acaba ignorándose.
+        <span
+          className="max-w-[16rem] text-[10px] leading-tight text-amber-800 dark:text-amber-200"
+          title={observaciones.join("\n")}
+        >
+          {observaciones.join(" · ")}
+        </span>
+      )}
       {inv.emailStatus === "error" && (
         <span className="text-[10px] font-semibold text-red-700 dark:text-red-300">correo falló</span>
       )}

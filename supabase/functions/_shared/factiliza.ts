@@ -461,6 +461,48 @@ export interface Resultado {
    * `/invoice/cdr` en vez de dar el comprobante por cerrado sin constancia.
    */
   yaDeclarado?: boolean;
+  /**
+   * El documento salió `observado` pero **todas** las notas de SUNAT son
+   * informativas. Sirve para no llamar a nadie a revisar lo que no tiene
+   * arreglo por nuestra parte (ver `soloSonInformativas`).
+   */
+  soloInfo?: boolean;
+}
+
+/**
+ * Si TODAS las notas del CDR son meramente informativas.
+ *
+ * ── POR QUÉ HACE FALTA DISTINGUIRLAS ─────────────────────────────────────────
+ *
+ * Un CDR con `code: "0"` es una ACEPTACIÓN, y aun así puede traer notas. No
+ * todas pesan igual:
+ *
+ *   · «4092 - El nombre comercial del emisor no cumple con el formato
+ *      establecido - INFO: 4092 (nodo: "cac:PartyName/cbc:Name" valor: "-")»
+ *     Es un dato del PERFIL DE LA EMPRESA en Factiliza, no del comprobante. Se
+ *     repite idéntica en todas las facturas y no se arregla reemitiendo:
+ *     reemitir una aceptada solo quemaría correlativos.
+ *
+ *   · Una nota sobre un importe, una fecha o el cliente sí merece que alguien
+ *     mire, porque apunta a cómo armamos el documento.
+ *
+ * Marcar la primera para revisión manual entrena a no mirar el aviso, y el día
+ * que llegue una de las segundas nadie la verá. Por eso solo las que NO son
+ * informativas levantan `needs_review`.
+ *
+ * ── CÓMO SE RECONOCEN ────────────────────────────────────────────────────────
+ *
+ * Por el marcador literal `INFO:` que SUNAT pone en el texto de la nota. NO se
+ * deduce del código numérico: la numeración de SUNAT no es algo que podamos
+ * comprobar desde aquí, y equivocarse en esa dirección silenciaría un aviso de
+ * verdad.
+ *
+ * ANTE LA DUDA, SE REVISA: una nota sin el marcador, una que no sea texto, o
+ * una lista vacía que aun así llegó hasta aquí, devuelven `false`.
+ */
+export function soloSonInformativas(notas: unknown[]): boolean {
+  if (notas.length === 0) return false;
+  return notas.every((n) => typeof n === "string" && /\bINFO:/.test(n));
 }
 
 /**
@@ -607,6 +649,10 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
   // que mirar; sin CDR, Factiliza lo aceptó pero SUNAT aún no ha dicho nada.
   return {
     desenlace: notas.length > 0 ? "observado" : "aceptado",
+    // Aceptado con notas, pero todas informativas: queda constancia en el CDR y
+    // en el estado, sin sacar a nadie a revisar algo que no depende de este
+    // comprobante.
+    ...(notas.length > 0 && soloSonInformativas(notas) ? { soloInfo: true } : {}),
     hash: (data.hash as string) ?? null,
     cdr,
     cdrZip: (sunat.cdrZip as string) ?? null,

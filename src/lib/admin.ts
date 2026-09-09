@@ -376,6 +376,15 @@ export interface AdminInvoice {
   emailStatus: string;
   needsReview: boolean;
   sunatError: string | null;
+  /**
+   * Las observaciones que SUNAT devolvió en el CDR.
+   *
+   * Un comprobante «observado» está ACEPTADO: lo que hay que enseñar no es un
+   * error, sino qué le llamó la atención a SUNAT. Sin esto, la etiqueta ámbar
+   * del panel no se puede interpretar — y el `sunat_last_error` de esas filas
+   * dice literalmente «ha sido aceptada», que confunde más que ayuda.
+   */
+  sunatNotas: string[];
   sunatAttempts: number;
   esPrueba: boolean;
   /** Si está anulado: cuándo, por qué y con qué nota de crédito. */
@@ -383,6 +392,19 @@ export interface AdminInvoice {
   anuladoMotivo: string | null;
   notaNumber: string | null;
   notaStatus: string | null;
+}
+
+/**
+ * Las notas del CDR, que es JSON libre y viene de fuera.
+ *
+ * Se filtra a cadenas no vacías a propósito: si SUNAT o Factiliza cambian la
+ * forma de ese campo, aquí se queda una lista vacía y el panel simplemente no
+ * enseña el detalle, en vez de reventar la tabla entera de comprobantes.
+ */
+function notasDelCdr(cdr: { notes?: unknown } | null | undefined): string[] {
+  const n = cdr?.notes;
+  if (!Array.isArray(n)) return [];
+  return n.filter((x): x is string => typeof x === "string" && x.trim() !== "");
 }
 
 // Forma (laxa) de la fila que devuelve PostgREST con el join anidado. Las
@@ -406,6 +428,7 @@ interface InvoiceRow {
   email_status?: string | null;
   needs_review?: boolean | null;
   sunat_last_error?: string | null;
+  sunat_cdr?: { notes?: unknown } | null;
   sunat_attempts?: number | null;
   es_prueba?: boolean | null;
   anulado_at?: string | null;
@@ -491,7 +514,7 @@ export async function fetchAllInvoices(
         .from("invoices")
         .select(
           "id, number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, " +
-            "sunat_status, email_status, needs_review, sunat_last_error, sunat_attempts, es_prueba, " +
+            "sunat_status, email_status, needs_review, sunat_last_error, sunat_cdr, sunat_attempts, es_prueba, " +
             "anulado_at, anulado_motivo, nota_number, nota_sunat_status, " +
             "orders ( order_listings ( listings ( title ) ) )",
           { count: "exact" },
@@ -544,6 +567,7 @@ export async function fetchAllInvoices(
           emailStatus: r.email_status ?? "pendiente",
           needsReview: r.needs_review === true,
           sunatError: r.sunat_last_error ?? null,
+          sunatNotas: notasDelCdr(r.sunat_cdr),
           sunatAttempts: Number(r.sunat_attempts ?? 0),
           esPrueba: r.es_prueba === true,
           anuladoAt: r.anulado_at ?? null,
@@ -573,6 +597,7 @@ export async function fetchAllInvoices(
     emailStatus: "omitido",
     needsReview: false,
     sunatError: null,
+    sunatNotas: [],
     sunatAttempts: 0,
     esPrueba: false,
     anuladoAt: null,
