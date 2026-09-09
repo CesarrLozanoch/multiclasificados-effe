@@ -1,85 +1,121 @@
-# eFFe Clasificados
+# eFFe Multiclasificados
 
-Marketplace de avisos clasificados para Perú: publicación de avisos con modelo de
-**créditos prepagados**, verificación de identidad (DNI/RUC vía Factiliza), pasarela
-de pagos **Izipay/Lyra**, mensajería en tiempo real, panel de administración con
-control de acceso por rol y app móvil (Android hoy; iOS en preparación) vía Capacitor.
+Marketplace de avisos clasificados para Perú. Un anunciante compra **saldo**, publica
+avisos con ese saldo y recibe su **comprobante electrónico declarado a SUNAT**; un
+comprador busca, filtra por cercanía y contacta por chat o WhatsApp.
+
+Web en producción: **[coleffe.com](https://www.coleffe.com)** · Android e iOS con Capacitor.
+
+> **Ojo antes de tocar nada:** el sistema mueve **dinero real** (Izipay) y emite
+> **documentos fiscales reales** (Factiliza → SUNAT). Una boleta emitida no se borra:
+> se anula con una nota de crédito. Ver [`docs/facturacion.md`](docs/facturacion.md).
+
+---
+
+## Índice
+
+| Documento | De qué va |
+|---|---|
+| [`docs/arquitectura.md`](docs/arquitectura.md) | Cómo encajan las piezas y por dónde pasa cada cosa |
+| [`docs/pagos.md`](docs/pagos.md) | Saldo, precios, Izipay, Yape/Plin y por qué el importe se recalcula en el servidor |
+| [`docs/facturacion.md`](docs/facturacion.md) | Boletas y facturas: Factiliza, SUNAT, correlativos y anulaciones |
+| [`docs/base-de-datos.md`](docs/base-de-datos.md) | Migraciones, RLS y **las tres trampas que ya han mordido** |
+| [`docs/despliegue.md`](docs/despliegue.md) | Cómo sale a producción cada pieza, y qué hay que subir en cada deploy |
+| [`docs/pruebas.md`](docs/pruebas.md) | Qué se prueba aquí, cómo, y qué comprobación **no** vale |
+| [`PLAN-IMPLEMENTACION.md`](PLAN-IMPLEMENTACION.md) | Plan por fases y pendientes externos |
+| [`docs/yape-plin.md`](docs/yape-plin.md) | Manual del cobro manual por billetera |
+| [`EMAIL-SETUP.md`](EMAIL-SETUP.md) · [`PUSH-SETUP.md`](PUSH-SETUP.md) · [`GENERAR-APK.md`](GENERAR-APK.md) · [`COMPILAR-APPS.txt`](COMPILAR-APPS.txt) | Correo, notificaciones y compilación móvil |
+
+Cada Edge Function con configuración propia lleva su `DEPLOY.md` al lado
+(`supabase/functions/<nombre>/DEPLOY.md`): ahí están los *secrets* que necesita.
+
+---
 
 ## Stack
 
-- **Frontend:** React 18 + TypeScript + Vite, Tailwind CSS, shadcn/ui (Radix).
-- **Backend:** Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions en Deno).
-- **Móvil:** Capacitor 8 (APK Android; pipeline iOS → TestFlight en `codemagic.yaml`).
-- **Mapas y direcciones:** Google Maps Platform (Maps JavaScript API, Places API (New) y Geocoding API). **Gráficas:** Recharts. **Tests:** Vitest + Testing Library + PGlite.
-
-## Requisitos
-
-- Node.js 20+ y npm.
-- Un proyecto de Supabase (para desarrollo real) o el `.env` de pruebas (ver abajo).
+- **Frontend:** React 18 + TypeScript + Vite, Tailwind, shadcn/ui (Radix).
+- **Backend:** Supabase — Postgres con RLS, Auth, Realtime, Storage y Edge Functions (Deno).
+- **Funciones de servidor propias:** Vercel (`api/`), para lo que un buscador o WhatsApp
+  tienen que ver sin ejecutar JavaScript.
+- **Móvil:** Capacitor 8. Android por Android Studio; iOS por `codemagic.yaml` → TestFlight.
+- **Mapas:** Google Maps Platform — Maps JavaScript API y Places (New).
+- **Pruebas:** Vitest + Testing Library + PGlite (Postgres en WASM) + Playwright.
 
 ## Puesta en marcha
 
 ```sh
 npm install
-cp .env.example .env   # y completa los valores
-npm run dev            # http://localhost:8080
+cp .env.example .env    # y completa los valores
+npm run dev             # http://localhost:8080
 ```
 
 ### Variables de entorno (`.env`)
 
 | Variable | Uso |
 |---|---|
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Conexión a Supabase (obligatorias). |
-| `VITE_PUBLIC_SITE_URL` | Dominio público; base de los enlaces de correo y de la página de pago `/pay`. |
-| `VITE_IZIPAY_PUBLIC_KEY` | Clave pública de Izipay (Back Office → Claves de API REST). |
-| `VITE_HCAPTCHA_SITE_KEY` | Sitekey de hCaptcha (login de staff). Sin ella se usa la de prueba. |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Conexión a Supabase. **Obligatorias** — sin ellas ni siquiera arrancan las pruebas. |
+| `VITE_PUBLIC_SITE_URL` | Dominio público. Es la base de los enlaces de los correos y de la página de pago. |
+| `VITE_IZIPAY_PUBLIC_KEY` | Clave **pública** de Izipay (Back Office → Claves de API REST). |
+| `VITE_IZIPAY_STATIC_ENDPOINT` | Endpoint del formulario incrustado de Izipay. |
+| `VITE_GOOGLE_MAPS_API_KEY` | Maps JavaScript API + Places. Restringida por dominio. |
+| `VITE_GOOGLE_MAPS_MAP_ID` | Map ID de Google, necesario para los marcadores nuevos. |
+| `VITE_HCAPTCHA_SITE_KEY` | Sitekey de hCaptcha para el login de staff. Sin ella se usa la de prueba. |
 
-Las llaves **secretas** (Izipay Shop/Password/HMAC, Factiliza, Resend, `service_role`)
-viven como *secrets* de las Edge Functions, **nunca** en el repo. Ver los `DEPLOY.md`
-en `supabase/functions/*/`.
+Todo lo **secreto** —Izipay (shop, password, HMAC), Factiliza, Resend, `service_role`—
+vive como *secret* de las Edge Functions y **nunca** en el repositorio ni en un `VITE_*`
+(cualquier `VITE_*` acaba dentro del JavaScript que descarga el navegador).
 
-## Scripts
+### Comandos
 
 ```sh
-npm run dev        # servidor de desarrollo
-npm run build      # build de producción (dist/)
-npm run lint       # ESLint
-npm run test       # suite de Vitest (una pasada)
-npm run test:watch # Vitest en modo watch
+npm run dev         # desarrollo
+npm run build       # build de producción → dist/
+npm run typecheck   # TypeScript  ← el de verdad; ver la nota de abajo
+npm run lint        # ESLint
+npm run test        # Vitest, una pasada (~2800 pruebas, unos 4 min)
+npm run test:watch  # Vitest en watch
+npm run test:layout # Playwright: comprobaciones de maquetación
 ```
 
-> **Tests:** requieren un `.env` local con `VITE_SUPABASE_URL`/`ANON_KEY` (aunque sean
-> valores dummy), o `createClient("")` lanza «supabaseUrl is required». El `.env` está
-> en `.gitignore`. Algunos tests de migraciones usan PGlite (Postgres en WASM); si la
-> máquina va lenta puede hacer falta subir el `--hookTimeout`.
+> ⚠️ **`npx tsc --noEmit` no comprueba nada en este repositorio.** Sin `-p` coge otro
+> `tsconfig` y sale limpio pase lo que pase. El único que vale es `npm run typecheck`.
 
 ## Estructura
 
 ```
 src/
-  pages/        # rutas por rol (público, buscador, anunciante, admin, superadmin)
-  components/   # UI y componentes de dominio (Navbar, layouts, modales…)
-  lib/          # acceso a datos y lógica (auth, publish, credits, payments, pricing…)
-  hooks/        # hooks (useSession, useUnreadMessages, useKeyboardInset…)
-  test/         # Vitest
+  pages/           rutas por rol: público, buscador, anunciante, admin, superadmin
+  components/      UI y componentes de dominio (Navbar, layouts, modales…)
+  lib/             datos y lógica: auth, publish, credits, payments, pricing, geocode…
+  hooks/           useSession, useUnreadMessages, useKeyboardInset, useFilaSenalada…
+  data/            catálogos estáticos (países, departamentos, zonas)
+  test/            ~296 ficheros de pruebas
 supabase/
-  migrations/   # esquema SQL versionado (0001–00xx), RLS, RPCs, triggers
-  functions/    # Edge Functions (create-payment, payment-webhook, verify-doc…)
-android/        # proyecto Capacitor Android
-capacitor.config.ts
-codemagic.yaml  # CI de build iOS → TestFlight
+  migrations/      esquema versionado (0001–0149): tablas, RLS, RPCs, triggers, cron
+  functions/       Edge Functions en Deno, con su DEPLOY.md
+    _shared/       lo que comparten (factiliza, pricing, plantillas de correo…)
+api/               funciones de Vercel: og-aviso, sitemap, pais
+android/           proyecto Capacitor Android
+codemagic.yaml     CI de iOS → TestFlight
 ```
 
-## Móvil
+## Cómo funciona, en corto
 
-- **Android:** `npm run build && npx cap sync android`, luego abrir `android/` en Android Studio.
-- **iOS:** lo compila `codemagic.yaml` (regenera `ios/` con `npx cap add ios` en cada build).
-  Los pendientes de iOS están en el checklist de estado (ver abajo) y en [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md).
+1. **Registro y verificación.** El anunciante da su DNI/RUC y `verify-doc` lo consulta
+   en Factiliza; el nombre lo pone la fuente oficial, no el usuario.
+2. **Compra de saldo.** Elige un paquete y paga. El importe **se recalcula en el
+   servidor** antes de cobrar, y el webhook de Izipay es quien acredita: nunca el
+   navegador. Ver [`docs/pagos.md`](docs/pagos.md).
+3. **Comprobante.** Al liquidarse el pago se emite boleta o factura, se declara a SUNAT
+   y se envía por correo con su PDF. Ver [`docs/facturacion.md`](docs/facturacion.md).
+4. **Publicación.** El aviso descuenta saldo, pasa por moderación si toca, se publica y
+   vence solo. Se avisa antes de que venza y se puede renovar.
+5. **Contacto.** Chat en tiempo real o WhatsApp. Cualquiera puede denunciar un aviso.
 
-## Documentación de estado
+Los detalles, en [`docs/arquitectura.md`](docs/arquitectura.md).
 
-- **`CHECKLIST.md`** — inventario «hecho / falta» de todo el proyecto. **No está en el
-  repositorio**: describe qué credenciales existen y qué sigue sin cerrar, así que
-  desde el 31-ago-2026 vive fuera, en
-  `~/.claude/projects/C--Claude-MulticlasificadosEffe/CHECKLIST.md`.
-- [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md) — plan por fases y pendientes externos (llaves, APNs…).
+## Documentación que **no** está aquí
+
+`CHECKLIST.md` —el inventario «hecho / falta» del proyecto— **no está en el
+repositorio**: dice qué credenciales existen y qué sigue sin cerrar. Desde el
+31-ago-2026 vive en `~/.claude/projects/C--Claude-MulticlasificadosEffe/CHECKLIST.md`.
