@@ -1,89 +1,129 @@
 # DNS de coleffe.com
 
-**Los nameservers son de Vercel** (`ns1.vercel-dns.com`, `ns2.vercel-dns.com`), así que la
-zona entera vive en el panel de Vercel del proyecto.
+Todo lo necesario para **rehacer la zona desde cero** en un proveedor nuevo.
 
-> ⚠️ **Al mover el dominio a otra cuenta de Vercel, la zona nueva empieza VACÍA.** Solo se
-> recrean solos los registros de la web. Todo lo demás —el correo— hay que volver a
-> escribirlo a mano, y si no se hace, deja de funcionar. Esta página existe para eso.
+Leído del DNS público el **9 de septiembre de 2026**, con la zona todavía viva.
+Registrador: **PublicDomainRegistry (PDR)**. Nameservers: `ns1/ns2.vercel-dns.com`.
 
-Verificado contra el DNS público el **9 de septiembre de 2026**.
+> ⚠️ **La zona no se copia sola.** Al mover el dominio de cuenta —o de proveedor— solo se
+> recrean los registros de la web. Todo el correo hay que volver a escribirlo, y si falta
+> algo, deja de funcionar sin avisar.
 
 ---
 
-## Lo que hay que copiar a mano
+## Los 15 registros
 
-### Envío de correo (Resend) — sin esto la plataforma deja de mandar correos
+### 1 · Recepción de correo — hostingcorreo (9 registros)
 
-Boletas, avisos de vencimiento, recuperación de contraseña, reclamos: todo sale por aquí.
-Si faltan, Resend **desverifica el dominio** y los envíos empiezan a rechazarse.
+Sin esto **nadie recibe nada** en `avisos@coleffe.com`. El buzón lo sirve el hosting de
+correo, no Vercel.
+
+| Nombre | Tipo | Valor | Prioridad |
+|---|---|---|---|
+| `@` *(raíz)* | MX | `mx1.hostingcorreo.com` | 10 |
+| `@` | MX | `mx2.hostingcorreo.com` | 20 |
+| `@` | MX | `mx3.hostingcorreo.com` | 30 |
+| `@` | MX | `mx4.hostingcorreo.com` | 40 |
+| `@` | TXT | `v=spf1 +mx +ip4:184.107.5.178 include:relay.mailchannels.net ~all` | — |
+| `_dmarc` | TXT | `v=DMARC1; p=none;` | — |
+| `mail` | CNAME | `lc2.hostingcorreo.com` | — |
+| `webmail` | A | `184.107.5.178` | — |
+| `cpanel` | A | `184.107.5.178` | — |
+
+> El SPF va **sin** el `+a` que traía del cPanel: ese `a` resuelve a las IPs de Vercel,
+> que no envían correo.
+
+### 2 · Envío de correo — Resend (3 registros)
+
+Sin esto **la plataforma deja de mandar** boletas, avisos de vencimiento, recuperación de
+contraseña y reclamos. Resend desverifica el dominio y empieza a rechazar los envíos.
 
 | Nombre | Tipo | Valor | Prioridad |
 |---|---|---|---|
 | `send` | MX | `feedback-smtp.sa-east-1.amazonses.com` | 10 |
 | `send` | TXT | `v=spf1 include:amazonses.com ~all` | — |
-| `resend._domainkey` | TXT | la clave DKIM (abajo, **en una sola línea**) | — |
+| `resend._domainkey` | TXT | la clave DKIM ↓ **en una sola línea** | — |
 
 ```
 p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCxfrqBkjGj4S7U/vXfEy3Yfpd114iNLZ55HrBTImu67/q78lWOcJzh3xIh2Sj2BKeFzRMb/9S1uUZ9k7BOl1KqQoH9M3ebjNzd3Gr+RckmkzKNjsmyeJwTupd6t5bNuS4Q4cVNuan4Hjg7Wib61X7JMrHwhJ81/lmWKco5uT20rwIDAQAB
 ```
 
-> El DKIM son 218 caracteres y **no admite saltos de línea ni espacios**. Es el registro
-> que más veces se pega mal; si el correo no sale, es el primero que hay que mirar.
->
-> La región (`sa-east-1`) tiene que ser la misma que la del dominio en Resend.
+> Son **218 caracteres sin espacios ni saltos de línea**. Es el registro que más veces se
+> pega mal; si el correo no sale, es lo primero que hay que mirar.
+> La región (`sa-east-1`) debe coincidir con la del dominio en Resend.
 
-### Recepción de correo (hostingcorreo) — sin esto nadie recibe nada
+### 3 · Certificados — CAA (3 registros)
 
-El buzón real —`avisos@coleffe.com`— **no está en Vercel**: lo sirve el hosting de correo.
-Vercel solo tiene el DNS.
+Dicen qué autoridades pueden emitir certificados para el dominio.
 
-| Nombre | Tipo | Valor | Prioridad |
-|---|---|---|---|
-| *(raíz)* | MX | `mx1.hostingcorreo.com` | 10 |
-| *(raíz)* | MX | `mx2.hostingcorreo.com` | 20 |
-| *(raíz)* | MX | `mx3.hostingcorreo.com` | 30 |
-| *(raíz)* | MX | `mx4.hostingcorreo.com` | 40 |
-| *(raíz)* | TXT | `v=spf1 +mx +ip4:184.107.5.178 include:relay.mailchannels.net ~all` | — |
-| `_dmarc` | TXT | `v=DMARC1; p=none;` | — |
-| `mail` | CNAME | `lc2.hostingcorreo.com` | — |
+| Nombre | Tipo | Valor |
+|---|---|---|
+| `@` | CAA | `0 issue "letsencrypt.org"` |
+| `@` | CAA | `0 issue "pki.goog"` |
+| `@` | CAA | `0 issue "sectigo.com"` |
 
-> **Esto ya se perdió una vez.** Al mover el dominio a Vercel la zona llegó vacía, se
-> fueron los cuatro MX y con ellos toda la recepción. **Enviar siguió funcionando**
-> —usa DKIM y `send.coleffe.com`, que son registros aparte—, así que desde dentro no se
-> notaba nada: los correos salían con normalidad mientras los que entraban se perdían.
->
-> El SPF de la raíz va **sin** el `+a` que tenía en el cPanel: ese `a` ahora resuelve a
-> las IPs de Vercel, que no envían correo.
+> **O los tres, o ninguno.** Si se crea un CAA incompleto que deje fuera a Let's Encrypt,
+> Vercel **no podrá emitir el certificado** y el sitio se queda sin HTTPS. Sin ningún CAA
+> el comportamiento es el de siempre: cualquier autoridad puede emitir.
+
+---
 
 ## Lo que NO hay que copiar
 
-Los registros de la web (`A` en la raíz y en `www`, y la verificación del dominio) **los
-pone Vercel solo** al añadir el dominio al proyecto. No se escriben a mano.
+**Los registros de la web.** Las `A` de la raíz y de `www` apuntan a Vercel
+(`64.29.17.x`, `216.198.79.x`) y **las pone Vercel sola** al añadir el dominio al
+proyecto. Escribirlas a mano solo sirve para que se queden obsoletas.
+
+**Los subdominios que parecen existir y no existen.** La zona tiene un **comodín `*`**:
+cualquier nombre inventado responde con las IPs de Vercel. Comprobado —
+`xyzqwerty999.coleffe.com` resuelve. Por eso un barrido de nombres «encuentra» `blog`,
+`shop`, `admin`, `api`, `staging`, `test`… que **no están creados**.
+
+> Al rehacer la zona, ese comodín solo se recrea si de verdad se quiere que cualquier
+> subdominio apunte a la web. Si no, mejor sin él: un comodín hace imposible notar que un
+> subdominio está mal escrito.
+
+La forma de distinguir lo real de lo comodín, si hay que repetir esto: **lo real no
+apunta a Vercel** (`mail`, `webmail`, `cpanel`, los MX) **o tiene TTL 60** en vez de 1800.
+
+---
 
 ## Comprobar que quedó bien
 
 ```bash
+# Recepción — si sale vacío, NADIE recibe correo
+nslookup -type=MX coleffe.com
+
 # Envío — los tres tienen que responder
 nslookup -type=MX  send.coleffe.com
 nslookup -type=TXT send.coleffe.com
 nslookup -type=TXT resend._domainkey.coleffe.com
 
-# Recepción — vacío significa que NADIE recibe correo
-nslookup -type=MX coleffe.com
+# Web
+nslookup coleffe.com
 ```
 
-Y después, en el panel de **Resend → Domains**, que `coleffe.com` siga en **Verified**.
-Resend revisa el DNS por su cuenta: si algo falta, lo marca ahí antes de que se note en
-los envíos.
+Y en **Resend → Domains**, que `coleffe.com` siga en **Verified**. Resend revisa el DNS
+por su cuenta y lo marca ahí antes de que se note en los envíos.
 
-Prueba de extremo a extremo: recuperar la contraseña de una cuenta de prueba (usa el SMTP
-de Supabase Auth) y provocar un correo de la plataforma (usa la API de Resend) — son
-**dos vías distintas con credenciales distintas**, y una puede funcionar sin la otra. Ver
-[`../EMAIL-SETUP.md`](../EMAIL-SETUP.md).
+Prueba de extremo a extremo: recuperar la contraseña de una cuenta de prueba (va por el
+**SMTP de Supabase Auth**) y provocar un correo de la plataforma (va por la **API de
+Resend**). Son dos vías con credenciales distintas y **una puede funcionar sin la otra**:
+ver [`../EMAIL-SETUP.md`](../EMAIL-SETUP.md).
 
-## Cambios ya aplicados a esta zona
+## Cuánto tarda un cambio
 
-- `default._domainkey` (el DKIM del cPanel) **ya no existe** y no hace falta: el envío va
-  por Resend.
-- `quicknote` (CNAME a Render) **ya no existe**: era otro proyecto.
+| | TTL | Qué significa |
+|---|---|---|
+| MX | **60 s** | El correo se cae —o se arregla— en **un minuto**. Cero colchón. |
+| A | 1800 s | La web tarda ~30 min en reflejar un cambio. |
+| NS | 21600 s | **Cambiar de proveedor de DNS tarda hasta 6 horas** en propagar. |
+
+Por eso, al mover el DNS a otro proveedor, el orden es: **crear los 15 registros primero**,
+comprobar que responden contra los nameservers nuevos, y **solo entonces** cambiar los
+nameservers en el registrador.
+
+## Registros que aparecían en documentación vieja y ya no existen
+
+- `default._domainkey` — el DKIM del cPanel. Innecesario: el envío va por Resend.
+- `quicknote` — CNAME a Render, de otro proyecto.
