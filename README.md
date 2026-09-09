@@ -61,6 +61,13 @@ npm run dev             # http://localhost:8080
 | `VITE_GOOGLE_MAPS_MAP_ID` | Map ID de Google, necesario para los marcadores nuevos. |
 | `VITE_HCAPTCHA_SITE_KEY` | Sitekey de hCaptcha para el login de staff. Sin ella se usa la de prueba. |
 
+Para **subirlas a Vercel** hay un generador que las junta con su explicación:
+
+```sh
+node scripts/generar-env-vercel.mjs             # escribe .env.vercel (no va a git)
+node scripts/generar-env-vercel.mjs --verificar # avisa si el código usa alguna que falte
+```
+
 Todo lo **secreto** —Izipay (shop, password, HMAC), Factiliza, Resend, `service_role`—
 vive como *secret* de las Edge Functions y **nunca** en el repositorio ni en un `VITE_*`
 (cualquier `VITE_*` acaba dentro del JavaScript que descarga el navegador).

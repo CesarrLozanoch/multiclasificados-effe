@@ -29,6 +29,26 @@ export const APP_VERSION_DATE = "2026-09-09";
 
 `git push` a `main`. Vercel construye y publica.
 
+### Variables de entorno
+
+```sh
+node scripts/generar-env-vercel.mjs
+```
+
+Escribe `.env.vercel` —con los valores de tu `.env` local y la explicación de cada
+variable— para subirlo en **Settings → Environment Variables → Import .env**. No entra en
+git: `.gitignore` ignora `.env.*`.
+
+Dos cosas que se olvidan:
+
+- **Marcar los tres entornos** (Production, Preview y Development).
+- **Redesplegar después.** Estas variables se resuelven al CONSTRUIR, no al servir:
+  cambiarlas no toca el sitio ya publicado hasta la siguiente construccion.
+
+`--verificar` compara la lista del script con las `VITE_*` que el código lee de verdad.
+Sirve para lo que se rompe callado: alguien añade una variable, le funciona porque su
+`.env` ya la tiene, y en producción sale vacía sin dar ningún error.
+
 `vercel.json` lleva:
 
 - las **cabeceras de seguridad**, con la CSP;
