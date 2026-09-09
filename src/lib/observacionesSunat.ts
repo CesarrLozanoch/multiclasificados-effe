@@ -31,6 +31,16 @@ export interface ObservacionSunat {
   explicacion: string | null;
   /** El texto tal cual lo devolvió SUNAT. Nunca se pierde. */
   crudo: string;
+  /**
+   * SUNAT la marcó como meramente informativa (el literal `INFO:` en el texto).
+   *
+   * OJO — ESTA REGLA ESTÁ DOS VECES. La otra copia es `soloSonInformativas` en
+   * `supabase/functions/_shared/factiliza.ts`, que decide si el comprobante sale
+   * a revisión manual. No pueden compartir módulo porque una vive en el bundle
+   * del navegador y la otra en Deno, así que hay una prueba que las compara con
+   * los mismos casos: si alguien cambia una, salta.
+   */
+  informativa: boolean;
 }
 
 /**
@@ -72,15 +82,33 @@ export function leerObservacion(nota: string): ObservacionSunat {
   const m = crudo.match(CON_CODIGO);
   const codigo = m ? m[1] : null;
 
+  const informativa = /\bINFO:/.test(crudo);
+
   const conocida = codigo ? CONOCIDAS[codigo] : undefined;
   if (conocida) {
-    return { codigo, resumen: conocida.resumen, explicacion: conocida.explicacion, crudo };
+    return { codigo, resumen: conocida.resumen, explicacion: conocida.explicacion, crudo, informativa };
   }
 
   // Sin diccionario: al menos se le quita la cola de XML y el código repetido,
   // que es lo que hace el texto ilegible.
   const limpio = enMayuscula(crudo.replace(CON_CODIGO, "").replace(COLA_TECNICA, "").trim());
-  return { codigo, resumen: limpio || crudo, explicacion: null, crudo };
+  return { codigo, resumen: limpio || crudo, explicacion: null, crudo, informativa };
+}
+
+/**
+ * Si NINGUNA de las notas dice nada sobre este comprobante.
+ *
+ * Es lo que separa «aceptado, y aquí va un apunte sobre la configuración del
+ * emisor» de «aceptado, pero mira esto». Lo primero no debe pintarse como si
+ * algo hubiera ido mal: SUNAT lo aceptó y el panel de Factiliza lo muestra
+ * simplemente como aceptado.
+ *
+ * Ante la duda, `false`: una nota sin el marcador puede estar hablando de la
+ * venta, y esa sí hay que mirarla.
+ */
+export function todasInformativas(notas: string[]): boolean {
+  if (notas.length === 0) return false;
+  return leerObservaciones(notas).every((o) => o.informativa);
 }
 
 /** Todas las notas de un comprobante, en el mismo orden. */

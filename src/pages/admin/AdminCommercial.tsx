@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban, Search, FileSpreadsheet, Download } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
-import { resumenDeObservaciones } from "@/lib/observacionesSunat";
+import { resumenDeObservaciones, todasInformativas } from "@/lib/observacionesSunat";
 import { personKindLabel } from "@/lib/identity";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
@@ -233,14 +233,24 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
     );
   }
 
-  const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
-  // Un «observado» está ACEPTADO, con algo que SUNAT quiso señalar. En esta
-  // celda cabe una línea, así que solo se dice eso; el texto de la observación
-  // —que es una traza de XML— va en el modal «Ver», junto al resto del detalle.
+  const notas = inv.sunatNotas ?? [];
+  // Un «observado» está ACEPTADO. Y si además NINGUNA de las notas habla de este
+  // comprobante —hablan del perfil del emisor—, no hay absolutamente nada que
+  // distinga esta emisión de una limpia: SUNAT devolvió código 0 y el propio
+  // panel de Factiliza lo muestra como aceptada, sin más.
   //
-  // Y el `title` no puede ser el `sunatError`: en estas filas dice «ha sido
-  // aceptada», que contradice la etiqueta ámbar y confunde a quien la lee.
-  const resumen = resumenDeObservaciones(inv.sunatNotas ?? []);
+  // Por eso se pinta en verde, como lo que es. Pintarlo en ámbar era inventarse
+  // una alarma que no existe en ninguna de las dos fuentes, y obligaba a mirar
+  // dos paneles para descubrir que no pasaba nada.
+  //
+  // La nota no se esconde: se dice que la hay y se explica entera en «Ver».
+  const soloAviso = inv.sunatStatus === "observado" && todasInformativas(notas);
+  const s = soloAviso
+    ? ESTADO_SUNAT.aceptado
+    : ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
+  // El `title` no puede ser el `sunatError`: en estas filas dice «ha sido
+  // aceptada», que junto a una etiqueta de aviso confunde a quien la lee.
+  const resumen = resumenDeObservaciones(notas);
   return (
     <div className="flex flex-col gap-1 items-center">
       <span
@@ -250,10 +260,9 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
         {s.texto}
       </span>
       {resumen && (
-        // Lo esencial de un «observado» es que SÍ se emitió: la etiqueta ámbar
-        // sola se lee como un fallo. El porqué está a un clic, en «Ver».
+        // En esta celda cabe una línea. El detalle está a un clic, en «Ver».
         <span className="text-[10px] leading-tight text-muted-foreground" title={resumen}>
-          emitida, con aviso
+          con una nota
         </span>
       )}
       {inv.emailStatus === "error" && (

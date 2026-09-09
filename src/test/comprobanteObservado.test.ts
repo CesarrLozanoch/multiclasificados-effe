@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { leerObservacion, resumenDeObservaciones } from "@/lib/observacionesSunat";
+import { leerObservacion, resumenDeObservaciones, todasInformativas } from "@/lib/observacionesSunat";
+import { soloSonInformativas } from "../../supabase/functions/_shared/factiliza.ts";
 
 /**
  * Un comprobante «observado» y por qué lo está.
@@ -163,12 +164,26 @@ describe("y las coloca donde caben", () => {
     "utf8",
   );
 
+  it("🔴 una nota que no habla del comprobante NO se pinta como alarma", () => {
+    // SUNAT devolvio codigo 0 y el panel de Factiliza lo muestra simplemente
+    // como aceptada. Pintarlo en ambar era inventarse una alarma que no existe
+    // en ninguna de las dos fuentes, y obligaba a abrir dos paneles para
+    // descubrir que no pasaba nada.
+    expect(PANEL).toContain("todasInformativas");
+    expect(PANEL).toMatch(/soloAviso[\s\S]{0,120}ESTADO_SUNAT\.aceptado/);
+  });
+
+  it("pero se dice que la nota existe", () => {
+    // Alinear el color no es esconder el dato: se avisa, y el detalle completo
+    // esta en «Ver».
+    expect(PANEL).toContain("con una nota");
+  });
+
   it("🔴 en la celda NO se vuelca el texto de SUNAT", () => {
     // Cabía una línea y se metieron cinco de jerga de XML: la fila se deformó y
     // encima no se entendía. En la celda va lo esencial; el detalle, en «Ver».
     expect(PANEL).not.toMatch(/sunatNotas\.join/);
     expect(PANEL).not.toMatch(/observaciones\.join/);
-    expect(PANEL).toContain("emitida, con aviso");
   });
 
   it("y el `title` ya no dice lo contrario que la etiqueta", () => {
@@ -199,5 +214,36 @@ describe("y las coloca donde caben", () => {
     const m = ADMIN.match(/const ATENCION_SUNAT = \[([^\]]*)\]/);
     expect(m, "no se encontró ATENCION_SUNAT").toBeTruthy();
     expect(m![1]).not.toContain("observado");
+  });
+});
+
+/**
+ * La misma regla, en dos sitios, comparada.
+ *
+ * `todasInformativas` (navegador) decide de que COLOR se pinta el estado.
+ * `soloSonInformativas` (Deno) decide si el comprobante sale a REVISION manual.
+ * No pueden compartir modulo —una va en el bundle de Vite y la otra corre en la
+ * Edge Function—, y dos copias de una regla es exactamente como empiezan los
+ * fallos que nadie ve: el panel diria «aceptado» mientras la lista de pendientes
+ * grita, o al reves.
+ */
+describe("las dos copias de la regla no se separan", () => {
+  const CASOS: string[][] = [
+    [NOTA_INFO],
+    ['INFO: 4092 (nodo: "cac:PartyName")'],
+    ["4267 - El dato ingresado no cumple con el formato"],
+    [NOTA_INFO, "4267 - El dato ingresado no cumple con el formato"],
+    [NOTA_INFO, NOTA_INFO],
+    ["4092 - informativo, sin marcador"],
+    [],
+  ];
+
+  it("🔴 coinciden caso por caso", () => {
+    for (const notas of CASOS) {
+      expect(
+        todasInformativas(notas),
+        `discrepan para ${JSON.stringify(notas)}`,
+      ).toBe(soloSonInformativas(notas));
+    }
   });
 });
