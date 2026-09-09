@@ -13,24 +13,24 @@ Registrador: **PublicDomainRegistry (PDR)**. Nameservers: `ns1/ns2.vercel-dns.co
 
 ## Antes de nada: quien manda en la zona son los NAMESERVERS
 
-Los registros se escriben **donde apunten los nameservers del dominio**, y en ningun otro
-sitio. Lo que se escriba fuera de ahi no existe: el panel lo guarda, se ve en pantalla, y
+Los registros se escriben **donde apunten los nameservers del dominio**, y en ningún otro
+sitio. Lo que se escriba fuera de ahí no existe: el panel lo guarda, se ve en pantalla, y
 el mundo no lo ve.
 
-Hoy los nameservers son `ns1/ns2.vercel-dns.com`, asi que **manda Vercel**. Un registro
-creado en el panel de PublicDomainRegistry no tiene ningun efecto — es el motivo por el
-que un TXT de verificacion puede "estar puesto" y no verificar nunca.
+Hoy los nameservers son `ns1/ns2.vercel-dns.com`, así que **manda Vercel**. Un registro
+creado en el panel de PublicDomainRegistry no tiene ningún efecto — es el motivo por el
+que un TXT de verificación puede «estar puesto» y no verificar nunca.
 
 ### Las tres formas de montarlo
 
-| Donde se gestiona | Nameservers | Que hay que crear a mano |
+| Dónde se gestiona | Nameservers | Qué hay que crear a mano |
 |---|---|---|
 | **Vercel** | `ns1/ns2.vercel-dns.com` | Los 15 de abajo. La web la pone Vercel sola. |
 | **El registrador** (PDR) | los de PDR | Los 15 **+ 2 de la web** (ver abajo) |
 | **Un DNS aparte** (Cloudflare…) | los de ese proveedor | Los 15 **+ 2 de la web** |
 
-**Sacar el DNS de Vercel tiene una ventaja que aqui pesa mucho:** el dominio deja de
-depender de que cuenta de Vercel lo tiene. Se conecta con dos registros normales y se
+**Sacar el DNS de Vercel tiene una ventaja que aquí pesa mucho:** el dominio deja de
+depender de qué cuenta de Vercel lo tiene. Se conecta con dos registros normales y se
 acabaron las verificaciones entre cuentas.
 
 El precio son esos dos registros de la web, que con nameservers de Vercel se ponen solos:
@@ -40,18 +40,18 @@ El precio son esos dos registros de la web, que con nameservers de Vercel se pon
 | `@` | A | `76.76.21.21` |
 | `www` | CNAME | `cname.vercel-dns.com` |
 
-> **Copia estos dos del panel, no de aqui.** Al anadir el dominio, Vercel ensena los
-> valores exactos que le corresponden a ese proyecto —y hay mas de una variante viva
+> **Copia estos dos del panel, no de aquí.** Al añadir el dominio, Vercel enseña los
+> valores exactos que le corresponden a ese proyecto —y hay más de una variante viva
 > (`cname.vercel-dns-0.com`, entre otras)—. Los de arriba son los habituales, no una
-> garantia.
+> garantía.
 
-Dos avisos, segun donde acabe la zona:
+Dos avisos, según dónde acabe la zona:
 
 - **Cloudflare:** deja cada registro en **DNS only** (nube gris). Con el proxy activado
   (nube naranja) el correo se rompe y la nube de Cloudflare se mete entre el visitante y
   Vercel sin que nadie lo haya pedido.
 - **El registrador:** comprueba antes que su panel admite **MX con prioridad**, **TXT
-  largos** (el DKIM son 218 caracteres) y **CAA**. No todos los paneles basicos los
+  largos** (el DKIM son 218 caracteres) y **CAA**. No todos los paneles básicos los
   soportan, y descubrirlo a mitad de la mudanza es lo peor que puede pasar.
 
 ---
