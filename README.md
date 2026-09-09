@@ -24,6 +24,7 @@ Web en producción: **[coleffe.com](https://www.coleffe.com)** · Android e iOS 
 | [`docs/pruebas.md`](docs/pruebas.md) | Qué se prueba aquí, cómo, y qué comprobación **no** vale |
 | [`COMPILAR-APPS.txt`](COMPILAR-APPS.txt) | Compilar y publicar Android e iOS, incluidas las notificaciones push |
 | [`EMAIL-SETUP.md`](EMAIL-SETUP.md) | Cómo está montado el correo y cómo se diagnostica cuando no llega |
+| [`docs/dns-del-dominio.md`](docs/dns-del-dominio.md) | La zona DNS de coleffe.com. **Léelo antes de mover el dominio de cuenta** |
 | [`GENERAR-APK.md`](GENERAR-APK.md) | Compilar el APK **a mano en Windows**. Camino secundario: lo normal es el CI |
 
 Cada Edge Function con configuración propia lleva su `DEPLOY.md` al lado
