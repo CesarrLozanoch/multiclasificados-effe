@@ -92,7 +92,12 @@ Cobro **manual** por billetera, para quien no quiere poner la tarjeta:
 O sea: acredita, factura y publica exactamente igual que una tarjeta. Manual es solo la
 comprobación de que el dinero llegó.
 
-Manual de uso en [`yape-plin.md`](yape-plin.md).
+> **Por qué es manual y no automático.** Yape y Plin existen dentro de Izipay, pero en
+> una plataforma distinta de la que usa eFFe: la nuestra es la heredada (Lyra /
+> micuentaweb, tecnología PayZen), cuyo formulario incrustado solo admite tarjetas y
+> pagoEfectivo. Cobrarlos de forma automática no es activar una casilla — es integrar un
+> segundo medio de pago, con su afiliación, sus credenciales y su propio aviso de pago.
+> Se optó por la aprobación manual, que resuelve el caso sin duplicar el circuito.
 
 ## Probar sin cobrar
 

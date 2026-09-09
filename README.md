@@ -22,9 +22,9 @@ Web en producción: **[coleffe.com](https://www.coleffe.com)** · Android e iOS 
 | [`docs/base-de-datos.md`](docs/base-de-datos.md) | Migraciones, RLS y **las tres trampas que ya han mordido** |
 | [`docs/despliegue.md`](docs/despliegue.md) | Cómo sale a producción cada pieza, y qué hay que subir en cada deploy |
 | [`docs/pruebas.md`](docs/pruebas.md) | Qué se prueba aquí, cómo, y qué comprobación **no** vale |
-| [`PLAN-IMPLEMENTACION.md`](PLAN-IMPLEMENTACION.md) | Plan por fases y pendientes externos |
-| [`docs/yape-plin.md`](docs/yape-plin.md) | Manual del cobro manual por billetera |
-| [`EMAIL-SETUP.md`](EMAIL-SETUP.md) · [`PUSH-SETUP.md`](PUSH-SETUP.md) · [`GENERAR-APK.md`](GENERAR-APK.md) · [`COMPILAR-APPS.txt`](COMPILAR-APPS.txt) | Correo, notificaciones y compilación móvil |
+| [`COMPILAR-APPS.txt`](COMPILAR-APPS.txt) | Compilar y publicar Android e iOS, incluidas las notificaciones push |
+| [`EMAIL-SETUP.md`](EMAIL-SETUP.md) | Cómo está montado el correo y cómo se diagnostica cuando no llega |
+| [`GENERAR-APK.md`](GENERAR-APK.md) | Compilar el APK **a mano en Windows**. Camino secundario: lo normal es el CI |
 
 Cada Edge Function con configuración propia lleva su `DEPLOY.md` al lado
 (`supabase/functions/<nombre>/DEPLOY.md`): ahí están los *secrets* que necesita.
@@ -119,3 +119,7 @@ Los detalles, en [`docs/arquitectura.md`](docs/arquitectura.md).
 `CHECKLIST.md` —el inventario «hecho / falta» del proyecto— **no está en el
 repositorio**: dice qué credenciales existen y qué sigue sin cerrar. Desde el
 31-ago-2026 vive en `~/.claude/projects/C--Claude-MulticlasificadosEffe/CHECKLIST.md`.
+
+Ahí es donde se sigue lo que queda pendiente. En el repositorio no se guardan planes ni
+listas de tareas: envejecen sin que nadie los actualice y acaban afirmando cosas falsas
+sobre el estado del proyecto.
