@@ -18,6 +18,18 @@ export interface PlatformStats {
   activeListings: number;
   totalUsers: number;
   reviews: number;
+  /**
+   * Veces que alguien guardó un aviso en favoritos, acumulado desde siempre.
+   * Es el número de «Satisfacción» de la portada. SOLO SUBE: lo lleva un
+   * contador aparte (migración 0150), no un `count` de las filas vivas, que
+   * bajaría al quitar un favorito o al borrarse un aviso.
+   */
+  savedTotal: number;
+  /**
+   * Promedio de reseñas en porcentaje. Las reseñas están ocultas desde el
+   * 15-jul-2026, así que hoy siempre llega null; se conserva porque el APK
+   * publicado (2.6) todavía lo pinta.
+   */
   satisfaction: number | null;
 }
 
@@ -25,11 +37,15 @@ export async function fetchPlatformStats(): Promise<PlatformStats | null> {
   try {
     const { data, error } = await supabase.rpc("platform_stats");
     if (error) throw error;
-    const d = data as { active_listings?: number; total_users?: number; reviews?: number; satisfaction?: number | null };
+    const d = data as {
+      active_listings?: number; total_users?: number; reviews?: number;
+      satisfaction?: number | null; saved_total?: number;
+    };
     return {
       activeListings: Number(d?.active_listings) || 0,
       totalUsers: Number(d?.total_users) || 0,
       reviews: Number(d?.reviews) || 0,
+      savedTotal: Number(d?.saved_total) || 0,
       satisfaction: d?.satisfaction == null ? null : Number(d.satisfaction),
     };
   } catch {

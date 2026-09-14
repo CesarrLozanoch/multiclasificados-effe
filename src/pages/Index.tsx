@@ -252,7 +252,11 @@ const Index = () => {
       { value: activeListingsStr, label: "Avisos activos" },
       { value: platform ? platform.totalUsers.toLocaleString() : "…", label: "Usuarios registrados" },
       { value: "24/7", label: "Soporte dedicado" },
-      { value: platform?.satisfaction != null ? `${platform.satisfaction}%` : "—", label: "Satisfacción" },
+      // «Satisfacción» es el acumulado de veces que alguien guardó un aviso en
+      // favoritos, y así lo quiso el cliente: un número, sin porcentaje. Antes
+      // era el promedio de reseñas, que están ocultas desde julio y dejaban
+      // aquí un «—» permanente.
+      { value: platform ? platform.savedTotal.toLocaleString() : "…", label: "Satisfacción" },
     ],
     [platform, activeListingsStr],
   );

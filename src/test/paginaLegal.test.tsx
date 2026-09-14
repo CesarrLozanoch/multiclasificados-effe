@@ -63,8 +63,12 @@ describe("la página existe y lleva el documento entero", () => {
 });
 
 describe("el correo de contacto", () => {
+  // Desde la 0151 el texto del documento NO está en LegalTerms.tsx: vive en la
+  // base de datos y se edita desde el panel. Lo que queda en el código es el
+  // documento de fábrica —el que se enseña si la base no responde—, y es ahí
+  // donde hay que comprobar que el correo no está cableado.
   const LEGAL = fs.readFileSync(
-    path.resolve(__dirname, "../components/LegalTerms.tsx"), "utf8",
+    path.resolve(__dirname, "../lib/legalPorDefecto.ts"), "utf8",
   );
 
   it("es el buzón que de verdad recibe, no uno escrito a mano", async () => {
@@ -85,6 +89,17 @@ describe("el correo de contacto", () => {
   it("sale del módulo compartido, así que no puede quedarse atrás", () => {
     // Si mañana cambia el buzón, cambia en un sitio y cambia aquí también.
     expect(LEGAL).toContain('from "@/lib/soporte"');
+  });
+
+  it("y el texto ya no está cableado en el componente", () => {
+    // La prueba de que el punto 04 está hecho de verdad: si el contrato
+    // volviera a escribirse dentro del JSX, cambiar una cláusula volvería a
+    // costar un despliegue y este fichero sería el único sitio donde mirarlo.
+    const COMPONENTE = fs.readFileSync(
+      path.resolve(__dirname, "../components/LegalTerms.tsx"), "utf8",
+    );
+    expect(COMPONENTE).not.toContain("LOZANOCHEFFER SAC, identificada");
+    expect(COMPONENTE).toContain("fetchDocumentoLegal");
   });
 });
 

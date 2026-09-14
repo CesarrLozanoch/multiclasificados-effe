@@ -702,6 +702,74 @@ export default function ListingDetail() {
     );
   }
 
+  // La ficha del anunciante se pinta en DOS sitios y se escribe UNA vez:
+  // arriba a la derecha en escritorio, y al final de todo en móvil. Es el
+  // mismo elemento renderizado dos veces —React lo monta dos veces sin
+  // problema—, así que no hay copia que pueda quedarse desactualizada.
+  //
+  // POR QUÉ NO SE MUEVE EN EL DOM, como se hizo con el precio. El aside de
+  // escritorio es un bloque `sticky` con las tarjetas apiladas dentro: sacar
+  // esta de ahí para reordenarla en móvil la descolgaría del sticky y
+  // cambiaría el escritorio, que es justo lo que no se pide. Con `hidden` /
+  // `lg:hidden` solo una de las dos existe a la vez: la oculta no se lee, no
+  // se tabula y no se duplica para un lector de pantalla.
+  const fichaAnunciante = (
+    <div className="bg-card border border-border p-4 space-y-3 shadow-sm">
+      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Publicado por</span>
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
+          {confidential
+            ? <EyeOff size={20} />
+            : listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="font-bold text-foreground truncate flex items-center gap-1.5">
+            {advertiserName}
+            {listing.advertiserVerified && (
+              <ShieldCheck size={14} className="text-secondary shrink-0" aria-label="Anunciante verificado" />
+            )}
+          </p>
+          {/* La ubicación salía aquí por cuarta vez en la misma ficha. */}
+        </div>
+      </div>
+      {/* En un aviso confidencial estas cifras identifican al anunciante
+          igual que el enlace de abajo, así que también se ocultan. */}
+      {!confidential && (
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="text-center py-2 bg-muted/40 border border-border">
+            {/* "—" mientras carga o si falla: un 0 en un anunciante con
+                avisos es peor que no decir nada (IT3-013). */}
+            <p className="text-base font-extrabold text-primary">{sellerStats ? sellerStats.activeListings : "—"}</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
+          </div>
+          <div className="text-center py-2 bg-muted/40 border border-border">
+            <p className="text-base font-extrabold text-primary">{sellerStats ? membershipLabel(sellerStats.memberSince) : "—"}</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
+          </div>
+        </div>
+      )}
+      {/* En avisos confidenciales no se enlaza a los demás avisos del
+          anunciante: delataría su identidad. */}
+      {!confidential && (
+        <Button
+          variant="outline"
+          className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold"
+          disabled={!ownerId}
+          onClick={() => ownerId && navigate(`/buscar?owner=${ownerId}`)}
+        >
+          <Users size={14} /> Ver todos sus avisos
+        </Button>
+      )}
+      {!isOwner && (
+        <button
+          onClick={() => requireAuthOrRun(() => setUserReportOpen(true), "reportar a un usuario")}
+          className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors pt-1"
+        >
+          <Flag size={12} /> Reportar a este usuario
+        </button>
+      )}
+    </div>
+  );
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -972,62 +1040,9 @@ export default function ListingDetail() {
             </div>
           </div>
 
-          {/* Seller card */}
-          <div className="bg-card border border-border p-4 space-y-3 shadow-sm">
-            <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Publicado por</span>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
-                {confidential
-                  ? <EyeOff size={20} />
-                  : listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="font-bold text-foreground truncate flex items-center gap-1.5">
-                  {advertiserName}
-                  {listing.advertiserVerified && (
-                    <ShieldCheck size={14} className="text-secondary shrink-0" aria-label="Anunciante verificado" />
-                  )}
-                </p>
-                {/* La ubicación salía aquí por cuarta vez en la misma ficha. */}
-              </div>
-            </div>
-            {/* En un aviso confidencial estas cifras identifican al anunciante
-                igual que el enlace de abajo, así que también se ocultan. */}
-            {!confidential && (
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <div className="text-center py-2 bg-muted/40 border border-border">
-                  {/* "—" mientras carga o si falla: un 0 en un anunciante con
-                      avisos es peor que no decir nada (IT3-013). */}
-                  <p className="text-base font-extrabold text-primary">{sellerStats ? sellerStats.activeListings : "—"}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
-                </div>
-                <div className="text-center py-2 bg-muted/40 border border-border">
-                  <p className="text-base font-extrabold text-primary">{sellerStats ? membershipLabel(sellerStats.memberSince) : "—"}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
-                </div>
-              </div>
-            )}
-            {/* En avisos confidenciales no se enlaza a los demás avisos del
-                anunciante: delataría su identidad. */}
-            {!confidential && (
-              <Button
-                variant="outline"
-                className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold"
-                disabled={!ownerId}
-                onClick={() => ownerId && navigate(`/buscar?owner=${ownerId}`)}
-              >
-                <Users size={14} /> Ver todos sus avisos
-              </Button>
-            )}
-            {!isOwner && (
-              <button
-                onClick={() => requireAuthOrRun(() => setUserReportOpen(true), "reportar a un usuario")}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors pt-1"
-              >
-                <Flag size={12} /> Reportar a este usuario
-              </button>
-            )}
-          </div>
+          {/* Ficha del anunciante. En móvil NO va aquí: baja al final de la
+              ficha, debajo de toda la información del aviso. */}
+          <div className="hidden lg:block">{fichaAnunciante}</div>
 
           {/* Cierre de venta — no aplica a empleos (no es una venta de producto).
               Solo lo ve el comprador que ya tiene chat con el vendedor por este
@@ -1221,6 +1236,11 @@ export default function ListingDetail() {
               ListingReviews sigue existiendo; para reactivarlas, volver a montarlo
               aquí con `{isJobs && listing.id && (...)}`. `loadReviewMeta` sigue
               cargando el ownerId que usa isOwner. */}
+
+          {/* Solo en móvil: aquí abajo es donde el cliente quiere la ficha
+              del anunciante, después de la descripción, las características y el
+              mapa. En escritorio sigue arriba, en la columna de la derecha. */}
+          <div className="lg:hidden">{fichaAnunciante}</div>
         </div>
 
       </div>

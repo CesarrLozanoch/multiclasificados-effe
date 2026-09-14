@@ -2,6 +2,7 @@ import { useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { CheckCircle2, Wallet } from "lucide-react";
 import { PaymentForm } from "@/components/PaymentForm";
+import { SelloPagoSeguro } from "@/components/SelloPagoSeguro";
 import { verificarOrden } from "@/lib/payments";
 
 // Página de pago propia que se abre en el navegador del SISTEMA desde el APK
@@ -44,7 +45,14 @@ export default function PaymentPage() {
         ) : !formToken ? (
           <p className="text-sm text-destructive">Falta la información del pago. Vuelve a intentarlo desde la app.</p>
         ) : (
-          <PaymentForm formToken={formToken} publicKey={publicKey} onPaid={alPagar} />
+          <>
+            {/* Esta pantalla se abre en el navegador del sistema desde el APK,
+                o sea FUERA de la app: el usuario aterriza en una web que no
+                reconoce y que le pide su tarjeta. Aquí el sello importa todavía
+                más que en el modal de la web. */}
+            <SelloPagoSeguro />
+            <PaymentForm formToken={formToken} publicKey={publicKey} onPaid={alPagar} />
+          </>
         )}
       </div>
     </div>

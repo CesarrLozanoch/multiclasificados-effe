@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock, Smartphone } from "lucide-react";
+import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Smartphone } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
@@ -27,6 +27,7 @@ import {
   type PurchaseConfig, type CreatePaymentResult, type PagoManualCreado, type OrderOutcome,
 } from "@/lib/payments";
 import { PaymentForm, precargarKrypton } from "@/components/PaymentForm";
+import { SelloPagoSeguro } from "@/components/SelloPagoSeguro";
 import { PagoManualPanel } from "@/components/PagoManualPanel";
 import {
   configYapePlin, mediosDisponibles, NOMBRE_MEDIO, CONFIG_VACIA,
@@ -541,6 +542,10 @@ export function BuyCreditsModal({
               </span>
             </div>
 
+            {/* El sello va ARRIBA del formulario, no debajo: se lee antes de
+                teclear la tarjeta, que es cuando sirve de algo. */}
+            <SelloPagoSeguro />
+
             {confirming ? (
               <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 size={16} className="animate-spin" /> Confirmando tu pago…
@@ -566,10 +571,7 @@ export function BuyCreditsModal({
               >
                 <ArrowLeft size={14} /> Volver
               </Button>
-              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Lock size={12} className="text-success shrink-0" />
-                Pago cifrado procesado por Izipay
-              </span>
+              <SelloPagoSeguro variante="linea" />
             </div>
           </div>
         ) : (

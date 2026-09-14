@@ -39,15 +39,35 @@ export default function LegalPage() {
   useEffect(() => {
     if (!esPrivacidad) return;
     // Quien llega por /privacidad viene a por el tratamiento de datos, no a
-    // leerse el contrato entero. Se baja hasta esa sección.
+    // leerse el contrato entero. Se baja hasta esa cláusula.
     //
-    // `requestAnimationFrame` y no un salto directo: el ancla tiene que existir
-    // ya en el documento, y en el primer render aún no está pintada.
-    const id = requestAnimationFrame(() => {
+    // SE REINTENTA, y no basta con un `requestAnimationFrame`. Desde la 0151 el
+    // documento se carga de la base: en el primer render está el de fábrica
+    // —que ya trae el ancla, así que el primer intento suele acertar— pero
+    // cuando llega el de la base el contenido se sustituye entero y la posición
+    // se pierde. Reintentar durante un par de segundos cubre las dos cosas sin
+    // tener que enterarse de cuándo terminó la carga.
+    //
+    // Se para en cuanto el usuario toca la rueda: si ya está leyendo donde
+    // quiere, saltarle la página debajo del dedo es de las cosas más molestas
+    // que puede hacer una web.
+    let tocado = false;
+    const alTocar = () => { tocado = true; };
+    window.addEventListener("wheel", alTocar, { passive: true, once: true });
+    window.addEventListener("touchstart", alTocar, { passive: true, once: true });
+
+    const hasta = Date.now() + 2500;
+    const t = setInterval(() => {
+      if (tocado || Date.now() > hasta) { clearInterval(t); return; }
       document.getElementById("datos-personales")
         ?.scrollIntoView({ behavior: "auto", block: "start" });
-    });
-    return () => cancelAnimationFrame(id);
+    }, 120);
+
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("wheel", alTocar);
+      window.removeEventListener("touchstart", alTocar);
+    };
   }, [esPrivacidad]);
 
   return (

@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import AdminLegal from "@/pages/admin/AdminLegal";
+import {
+  normalizarLimites, avisoDeLimites, LIMITES_POR_DEFECTO, CLAVE_LIMITES,
+  ETIQUETA_LIMITES, SIN_LIMITE, type Limites,
+} from "@/lib/limitesDeTasa";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
@@ -14,7 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban, Search, FileSpreadsheet, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban, Search, FileSpreadsheet, Download, AlertCircle } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 import { resumenDeObservaciones, todasInformativas } from "@/lib/observacionesSunat";
 import { personKindLabel } from "@/lib/identity";
@@ -614,6 +619,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     setImgPreview(null);
     setSettings((s) => ({ ...s, default_listing_image: null }));
   };
+  // Límites de seguridad (H-06). Van APARTE de `settings` porque su valor es un
+  // objeto anidado y `Ajustes` está pensado para valores planos; meterlo ahí
+  // obligaría a tipar el resto como `any`, que es lo que se corrigió en su día.
+  const [limites, setLimites] = useState<Limites>(LIMITES_POR_DEFECTO);
+
   const [savingSettings, setSavingSettings] = useState(false);
 
   // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
@@ -734,6 +744,8 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         });
         return next;
       });
+      const fila = rows.find((s) => s.key === CLAVE_LIMITES);
+      if (fila) setLimites(normalizarLimites(fila.value));
     });
   }, []);
 
@@ -775,11 +787,14 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         : settings.default_listing_image;
 
       const aGuardar: Ajustes = { ...settings, default_listing_image: imagen };
-      await Promise.all(
-        (Object.keys(SETTING_KEYS) as SettingKey[]).map((k) =>
+      await Promise.all([
+        ...(Object.keys(SETTING_KEYS) as SettingKey[]).map((k) =>
           setSetting(k, aGuardar[k], SETTING_KEYS[k]),
         ),
-      );
+        // Los topes van en una sola clave, con su estructura anidada tal cual
+        // la lee el trigger de la base.
+        setSetting(CLAVE_LIMITES, limites, ETIQUETA_LIMITES),
+      ]);
 
       // Solo cuando la base de datos aceptó el cambio se borra la imagen vieja
       // del bucket. Al revés, un guardado fallido dejaría la portada apuntando a
@@ -806,6 +821,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
           <TabsTrigger value="sistema">Sistema</TabsTrigger>
           <TabsTrigger value="boletas">Boletas y facturas</TabsTrigger>
+          <TabsTrigger value="legal">Términos y privacidad</TabsTrigger>
         </TabsList>
 
         {/* CATEGORÍAS */}
@@ -1119,6 +1135,83 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 </div>
               </div>
 
+              {/* ── Límites de seguridad (H-06) ─────────────────────────────
+                  Los topes ya existían y ya eran configurables desde la 0124,
+                  pero solo escribiendo a mano en la base: aquí no había dónde
+                  tocarlos. Que sea el panel quien los cambie es justo lo que
+                  les da sentido — el momento de subir un tope es cuando un
+                  cliente real se acaba de quedar sin poder publicar, y eso no
+                  puede esperar a un despliegue. */}
+              <div className="space-y-3 border-t pt-5">
+                <div>
+                  <p className="font-medium text-sm">Límites de seguridad</p>
+                  <p className="text-xs text-muted-foreground">
+                    Cuántos avisos y cuántos mensajes puede llegar a hacer una misma persona
+                    antes de que la plataforma la frene. Sirve contra las ráfagas automáticas;
+                    el personal está exento y nunca se le aplica.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    <span className="font-semibold text-foreground">Un 0 significa sin límite.</span>{" "}
+                    Es la salida de emergencia si un cliente se topa con el freno y hay que
+                    desactivarlo en el momento.
+                  </p>
+                </div>
+
+                {([
+                  { accion: "aviso", titulo: "Avisos publicados", que: "avisos" },
+                  { accion: "mensaje", titulo: "Mensajes enviados", que: "mensajes" },
+                ] as const).map(({ accion, titulo, que }) => (
+                  <div key={accion} className="rounded-md border p-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {titulo}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        { ventana: "hora", etiqueta: "Máximo por hora" },
+                        { ventana: "dia", etiqueta: "Máximo por día" },
+                      ] as const).map(({ ventana, etiqueta }) => (
+                        <div key={ventana} className="space-y-1.5">
+                          <Label htmlFor={`limite_${accion}_${ventana}`} className="text-xs">
+                            {etiqueta}
+                          </Label>
+                          <Input
+                            id={`limite_${accion}_${ventana}`}
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={limites[accion][ventana]}
+                            disabled={!isSuper}
+                            onChange={(e) => {
+                              // Los decimales y los negativos se recortan aquí y
+                              // no al guardar: así el campo enseña desde el
+                              // primer momento el número que va a acabar en la
+                              // base, en vez de cambiar solo al pulsar Guardar.
+                              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                              setLimites((l) => ({ ...l, [accion]: { ...l[accion], [ventana]: n } }));
+                            }}
+                          />
+                          {limites[accion][ventana] === SIN_LIMITE && (
+                            <p className="text-[11px] text-amber-600">
+                              Sin límite: no se frena a nadie por {que} en esta ventana.
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Un tope diario por debajo del horario deja el horario en
+                    decorativo: el diario corta antes y el usuario recibe el
+                    mensaje equivocado. Se avisa antes de guardar, no después. */}
+                {avisoDeLimites(limites) && (
+                  <p className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-amber-700">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    {avisoDeLimites(limites)}
+                  </p>
+                )}
+              </div>
+
               <div className="flex items-center justify-end gap-3">
                 {!isSuper && (
                   <p className="text-xs text-muted-foreground">Solo un superadministrador puede cambiar estas variables.</p>
@@ -1300,6 +1393,15 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* TÉRMINOS Y PRIVACIDAD — el documento legal, editable.
+            En su propio componente y no aquí dentro: esta pantalla ya lleva
+            categorías, variables del sistema y comprobantes, y el editor del
+            documento tiene su propio estado de sobra. */}
+        <TabsContent value="legal" className="pt-4">
+          <AdminLegal isSuper={isSuper} />
+        </TabsContent>
+
       </Tabs>
 
       <InvoiceDetailDialog invoice={invoiceDetail} onClose={() => setInvoiceDetail(null)} />
