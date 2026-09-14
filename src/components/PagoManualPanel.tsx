@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Copy, Check, Loader2, Smartphone, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { SelloPagoSeguro } from "@/components/SelloPagoSeguro";
 import { formatSoles } from "@/lib/pricing";
 import {
   NOMBRE_MEDIO, codigoDePago, confirmarPagoManual, abrirVoucherEnWhatsApp, enlaceDelVoucher,
@@ -107,6 +108,15 @@ export function PagoManualPanel({
         </span>
         <span className="text-3xl font-extrabold text-secondary tracking-tight">{formatSoles(monto)}</span>
       </div>
+
+      {/* El sello va ARRIBA, antes de los pasos: quien duda de si transferir
+          o no, duda AQUÍ, no cuando ya mandó el dinero.
+
+          Es la variante de billetera, no la de tarjeta. Izipay no interviene en
+          un Yape, así que nombrarlo sería mentir; y el aviso de que nunca
+          pedimos la clave hace más falta en esta pantalla que en la otra,
+          porque la estafa habitual con billeteras en Perú es justo esa. */}
+      <SelloPagoSeguro medio="billetera" nombre={NOMBRE_MEDIO[medio]} />
 
       <ol className="space-y-3">
         <li className="flex gap-3">
