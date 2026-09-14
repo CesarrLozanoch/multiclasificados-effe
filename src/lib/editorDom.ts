@@ -42,6 +42,13 @@ function esNegrita(el: HTMLElement): boolean {
   return peso === "bold" || peso === "bolder" || Number(peso) >= 600;
 }
 
+/** ¿Este elemento pone el texto en cursiva? */
+function esCursiva(el: HTMLElement): boolean {
+  if (el.tagName === "I" || el.tagName === "EM") return true;
+  const estilo = el.style.fontStyle;
+  return estilo === "italic" || estilo === "oblique";
+}
+
 /** El color que impone este elemento, si impone alguno. */
 function colorDe(el: HTMLElement): Color | null {
   // `style.color` cubre `styleWithCSS`; el atributo `color` cubre el `<font>`
@@ -59,12 +66,13 @@ function colorDe(el: HTMLElement): Color | null {
 export function leerDelDom(raiz: HTMLElement): TextoConFormato {
   const partes: Fragmento[] = [];
 
-  const recorrer = (nodo: Node, negrita: boolean, color: Color | null) => {
+  const recorrer = (nodo: Node, negrita: boolean, cursiva: boolean, color: Color | null) => {
     if (nodo.nodeType === Node.TEXT_NODE) {
       const t = nodo.textContent ?? "";
       if (!t) return;
       const f: Fragmento = { t };
       if (negrita) f.b = true;
+      if (cursiva) f.i = true;
       if (color) f.c = color;
       partes.push(f);
       return;
@@ -84,11 +92,12 @@ export function leerDelDom(raiz: HTMLElement): TextoConFormato {
     if (esBloque && partes.length) partes.push({ t: "\n" });
 
     const n = negrita || esNegrita(el);
+    const k = cursiva || esCursiva(el);
     const c = colorDe(el) ?? color;
-    for (const hijo of Array.from(el.childNodes)) recorrer(hijo, n, c);
+    for (const hijo of Array.from(el.childNodes)) recorrer(hijo, n, k, c);
   };
 
-  for (const hijo of Array.from(raiz.childNodes)) recorrer(hijo, false, null);
+  for (const hijo of Array.from(raiz.childNodes)) recorrer(hijo, false, false, null);
   return normalizar(partes);
 }
 
@@ -113,9 +122,10 @@ export function escribirEnDom(raiz: HTMLElement, formato: TextoConFormato): void
       if (i > 0) raiz.appendChild(document.createElement("br"));
       if (!linea) return;
       const texto = document.createTextNode(linea);
-      if (!p.b && !p.c) { raiz.appendChild(texto); return; }
+      if (!p.b && !p.i && !p.c) { raiz.appendChild(texto); return; }
       const span = document.createElement("span");
       if (p.b) span.style.fontWeight = "700";
+      if (p.i) span.style.fontStyle = "italic";
       if (p.c) span.style.color = hexDeColor(p.c);
       span.appendChild(texto);
       raiz.appendChild(span);

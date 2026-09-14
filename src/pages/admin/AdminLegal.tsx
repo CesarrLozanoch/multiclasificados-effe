@@ -1,23 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Save, Plus, Trash2, ChevronUp, ChevronDown, Copy, RotateCcw, AlertCircle, Eye, Pencil,
-} from "lucide-react";
+import { Save, RotateCcw, AlertCircle, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { EditorDeTexto } from "@/components/EditorDeTexto";
+import { EditorDeDocumento } from "@/components/EditorDeDocumento";
 import { DocumentoLegal } from "@/components/DocumentoLegal";
 import { toast } from "@/hooks/use-toast";
 import { setSetting } from "@/lib/admin";
 import { mensajeDeError } from "@/lib/errores";
-import {
-  TIPOS_DE_BLOQUE, textoPlano, MAX_TEXTO, MAX_BLOQUES,
-  type Bloque, type Documento, type TipoBloque,
-} from "@/lib/documentoLegal";
+import { textoPlano, MAX_BLOQUES, type Documento } from "@/lib/documentoLegal";
 import {
   fetchDocumentoLegal, fechaDeHoyEnLetras, CLAVE_DOCUMENTO, CLAVE_ACTUALIZADO,
 } from "@/lib/legal";
@@ -26,28 +17,17 @@ import { DOCUMENTO_POR_DEFECTO } from "@/lib/legalPorDefecto";
 /**
  * Los Términos y Condiciones, editables.
  *
- * ── POR QUÉ NO ES UN CUADRO DE TEXTO GRANDE ──────────────────────────────────
+ * El documento entero va en UN cuadro, con la barra de formato fija arriba
+ * (`EditorDeDocumento`). La primera versión daba una caja por bloque —sesenta y
+ * ocho para este contrato— y era peor de usar: no se podía leer del tirón ni
+ * mover una frase de una cláusula a otra sin cortar y pegar entre cajas.
  *
- * Porque el documento se guarda como una estructura de bloques, no como texto
- * ni como HTML —ver `documentoLegal.ts` para el motivo, que es de seguridad—, y
- * lo que se edita tiene que ser lo que se guarda. Un cuadro único obligaría a
- * inventar una sintaxis, enseñársela al cliente y volver a parsearla en cada
- * tecla: tres sitios donde perder una cláusula.
- *
- * Por bloques, además, se reordena una cláusula sin cortar y pegar dos mil
- * caracteres, y la numeración es texto normal que se retoca a mano (a propósito:
- * numerar solo obligaría a renumerar todas las referencias cruzadas del
- * contrato —«conforme a la cláusula 9»— cada vez que alguien inserta una).
- *
- * ── SE VE MIENTRAS SE ESCRIBE ────────────────────────────────────────────────
- *
- * Cada bloque usa el mismo editor que la descripción de un aviso, así que la
- * negrita se ve puesta, no marcada. Y al lado hay una vista previa del
- * documento entero, tal cual lo verá quien entre en `/terminos`.
+ * Lo que se GUARDA sigue siendo una estructura de bloques, nunca HTML. Que se
+ * edite en un `contenteditable` no cambia eso: `documentoDesdeDom` reconoce las
+ * etiquetas que entiende y descarta el resto. El motivo está en
+ * `documentoLegal.ts` y es de seguridad — esta página la abre cualquiera sin
+ * sesión, incluido el revisor de Google Play.
  */
-
-const VACIO: Bloque = { tipo: "parrafo", texto: [{ t: "" }] };
-
 export default function AdminLegal({ isSuper }: { isSuper: boolean }) {
   const [bloques, setBloques] = useState<Documento>(DOCUMENTO_POR_DEFECTO);
   const [actualizado, setActualizado] = useState("");
@@ -63,61 +43,10 @@ export default function AdminLegal({ isSuper }: { isSuper: boolean }) {
     });
   }, []);
 
-  // ── Manipular la lista ─────────────────────────────────────────────────────
-  const tocar = (fn: (d: Documento) => Documento) => {
-    setBloques((d) => fn(d));
+  const alEditar = (d: Documento) => {
+    setBloques(d);
     setSucio(true);
   };
-
-  const cambiarTexto = (i: number, texto: Bloque["texto"]) =>
-    tocar((d) => d.map((b, j) => (j === i ? { ...b, texto } : b)));
-
-  const cambiarTipo = (i: number, tipo: TipoBloque) =>
-    tocar((d) => d.map((b, j) => {
-      if (j !== i) return b;
-      // El ancla solo tiene sentido en un título: si deja de serlo, se va con
-      // él. Si no, quedaría un ancla escondida en un párrafo y `/privacidad`
-      // aterrizaría en mitad de un texto sin encabezado.
-      const { ancla: _fuera, ...resto } = b;
-      return tipo === "titulo" && b.ancla ? { ...resto, tipo, ancla: b.ancla } : { ...resto, tipo };
-    }));
-
-  const mover = (i: number, delta: number) =>
-    tocar((d) => {
-      const j = i + delta;
-      if (j < 0 || j >= d.length) return d;
-      const copia = [...d];
-      [copia[i], copia[j]] = [copia[j], copia[i]];
-      return copia;
-    });
-
-  const insertar = (i: number) =>
-    tocar((d) => (d.length >= MAX_BLOQUES ? d : [...d.slice(0, i + 1), VACIO, ...d.slice(i + 1)]));
-
-  const duplicar = (i: number) =>
-    tocar((d) => {
-      if (d.length >= MAX_BLOQUES) return d;
-      // La copia NUNCA se lleva el ancla: dos elementos con el mismo id es HTML
-      // inválido y el salto de `/privacidad` se vuelve impredecible.
-      const { ancla: _fuera, ...copia } = d[i];
-      return [...d.slice(0, i + 1), { ...copia, texto: [...d[i].texto] }, ...d.slice(i + 1)];
-    });
-
-  const borrar = (i: number) => tocar((d) => d.filter((_, j) => j !== i));
-
-  const marcarAncla = (i: number) =>
-    tocar((d) => d.map((b, j) => {
-      if (j === i) return { ...b, ancla: "datos-personales" as const };
-      const { ancla: _fuera, ...resto } = b;
-      return resto;   // exclusiva: marcar una desmarca la anterior
-    }));
-
-  const quitarAncla = (i: number) =>
-    tocar((d) => d.map((b, j) => {
-      if (j !== i) return b;
-      const { ancla: _fuera, ...resto } = b;
-      return resto;
-    }));
 
   // ── Lo que hay que mirar antes de guardar ──────────────────────────────────
   const avisos = useMemo(() => {
@@ -125,21 +54,18 @@ export default function AdminLegal({ isSuper }: { isSuper: boolean }) {
     const conTexto = bloques.filter((b) => textoPlano(b).trim());
 
     if (conTexto.length === 0) lista.push("El documento está vacío.");
-    if (conTexto.length < bloques.length) {
-      lista.push(
-        `Hay ${bloques.length - conTexto.length} bloque(s) sin texto; no se guardarán.`,
-      );
-    }
     if (!bloques.some((b) => b.ancla === "datos-personales" && b.tipo === "titulo")) {
-      // Esto importa de verdad: es la dirección que Google Play tiene guardada
-      // como política de privacidad de la ficha.
+      // Esto importa de verdad: /privacidad es la dirección que Google Play
+      // tiene registrada como política de privacidad de la ficha.
       lista.push(
-        "Ninguna cláusula está marcada como la de datos personales: /privacidad dejará " +
-        "de bajar hasta ella y abrirá el documento por el principio.",
+        "Ninguna cláusula está marcada como la de datos personales. Pon el cursor en el " +
+        "título que corresponda y pulsa «Datos personales» en la barra; si no, /privacidad " +
+        "abrirá el documento por el principio en vez de bajar hasta ella.",
       );
     }
-    const largos = bloques.filter((b) => textoPlano(b).length > MAX_TEXTO).length;
-    if (largos) lista.push(`${largos} bloque(s) pasan de ${MAX_TEXTO} caracteres y se recortarán.`);
+    if (bloques.length >= MAX_BLOQUES) {
+      lista.push(`El documento llegó al tope de ${MAX_BLOQUES} bloques; lo que pase de ahí se pierde.`);
+    }
     return lista;
   }, [bloques]);
 
@@ -176,7 +102,9 @@ export default function AdminLegal({ isSuper }: { isSuper: boolean }) {
   };
 
   const restaurar = () => {
-    tocar(() => DOCUMENTO_POR_DEFECTO.map((b) => ({ ...b, texto: [...b.texto] })));
+    // Copia profunda: si no, editar después modificaría la constante del módulo
+    // y el «texto de fábrica» dejaría de serlo en lo que queda de sesión.
+    alEditar(DOCUMENTO_POR_DEFECTO.map((b) => ({ ...b, texto: b.texto.map((f) => ({ ...f })) })));
     toast({
       title: "Texto de fábrica cargado",
       description: "Todavía no se ha guardado: revísalo y pulsa Guardar si es lo que quieres.",
@@ -222,100 +150,14 @@ export default function AdminLegal({ isSuper }: { isSuper: boolean }) {
             <TabsTrigger value="vista" className="gap-1.5"><Eye size={13} /> Vista previa</TabsTrigger>
           </TabsList>
 
-          {/* ── EDITAR ── */}
-          <TabsContent value="editar" className="pt-4 space-y-3">
+          <TabsContent value="editar" className="pt-4">
             {cargando ? (
               <p className="text-sm text-muted-foreground py-6 text-center">Cargando el documento…</p>
             ) : (
-              <>
-                {bloques.map((b, i) => (
-                  <div key={i} className="rounded-md border p-3 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={b.tipo}
-                        disabled={!isSuper}
-                        onValueChange={(v) => cambiarTipo(i, v as TipoBloque)}
-                      >
-                        <SelectTrigger className="h-8 w-[190px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIPOS_DE_BLOQUE.map((t) => (
-                            <SelectItem key={t.tipo} value={t.tipo} className="text-xs">
-                              {t.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <span className="text-[11px] text-muted-foreground">
-                        {i + 1} de {bloques.length}
-                      </span>
-
-                      <div className="ml-auto flex items-center gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-8 w-8"
-                          disabled={!isSuper || i === 0}
-                          onClick={() => mover(i, -1)} aria-label="Subir este bloque">
-                          <ChevronUp size={14} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"
-                          disabled={!isSuper || i === bloques.length - 1}
-                          onClick={() => mover(i, 1)} aria-label="Bajar este bloque">
-                          <ChevronDown size={14} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"
-                          disabled={!isSuper} onClick={() => duplicar(i)} aria-label="Duplicar este bloque">
-                          <Copy size={13} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"
-                          disabled={!isSuper} onClick={() => insertar(i)} aria-label="Añadir un bloque debajo">
-                          <Plus size={14} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
-                          disabled={!isSuper} onClick={() => borrar(i)} aria-label="Borrar este bloque">
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <EditorDeTexto
-                      valor={b.texto}
-                      onChange={(v) => cambiarTexto(i, v)}
-                      maxLength={MAX_TEXTO}
-                      placeholder={b.tipo === "titulo" ? "1. Objeto y alcance del servicio" : "Escribe aquí…"}
-                      className={b.tipo === "titulo" ? "font-bold" : ""}
-                    />
-
-                    {b.tipo === "titulo" && (
-                      <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer">
-                        <Checkbox
-                          checked={b.ancla === "datos-personales"}
-                          disabled={!isSuper}
-                          onCheckedChange={(v) => (v ? marcarAncla(i) : quitarAncla(i))}
-                        />
-                        <span>
-                          Esta es la cláusula de datos personales.{" "}
-                          <span className="font-mono">/privacidad</span> baja directamente
-                          hasta aquí, y es la dirección que Google Play tiene registrada como
-                          política de privacidad. Solo puede estar marcada una.
-                        </span>
-                      </label>
-                    )}
-                  </div>
-                ))}
-
-                <Button
-                  variant="outline" className="w-full gap-1.5"
-                  disabled={!isSuper || bloques.length >= MAX_BLOQUES}
-                  onClick={() => insertar(bloques.length - 1)}
-                >
-                  <Plus size={14} /> Añadir un bloque al final
-                </Button>
-              </>
+              <EditorDeDocumento valor={bloques} onChange={alEditar} disabled={!isSuper} />
             )}
           </TabsContent>
 
-          {/* ── VISTA PREVIA ── */}
           <TabsContent value="vista" className="pt-4">
             <div className="rounded-md border bg-background p-5 max-w-3xl">
               {/* Es el MISMO componente que pinta la página pública, no una

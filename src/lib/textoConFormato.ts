@@ -105,6 +105,16 @@ export interface Fragmento {
   t: string;
   /** Negrita. Solo se guarda cuando es `true`: `false` ocuparía sitio sin decir nada. */
   b?: true;
+  /**
+   * Cursiva. La usa el editor del documento legal, NO el de los avisos: allí no
+   * hay botón que la ponga, así que nunca aparece en una descripción.
+   *
+   * Está aquí y no en un modelo aparte porque partir el tipo obligaría a
+   * duplicar `leerDelDom` —la pieza con los casos raros de verdad, la que
+   * entiende las cinco formas en que cada navegador deja el DOM tras dar
+   * formato—, y dos copias de eso se separan a la primera corrección.
+   */
+  i?: true;
   c?: Color;
 }
 
@@ -115,7 +125,7 @@ export const MAX_FRAGMENTOS = 300;
 
 /** ¿Las dos marcas son iguales? Decide si dos fragmentos se pueden fusionar. */
 const mismasMarcas = (a: Fragmento, b: Fragmento) =>
-  !!a.b === !!b.b && (a.c ?? null) === (b.c ?? null);
+  !!a.b === !!b.b && !!a.i === !!b.i && (a.c ?? null) === (b.c ?? null);
 
 /**
  * Deja la lista en su forma mínima: sin vacíos y sin vecinos que digan lo mismo.
@@ -137,6 +147,7 @@ export function normalizar(partes: Fragmento[]): TextoConFormato {
     // clave de más ni un `b: false` que la base rechazaría.
     const nuevo: Fragmento = { t: p.t };
     if (p.b) nuevo.b = true;
+    if (p.i) nuevo.i = true;
     if (p.c) nuevo.c = p.c;
     out.push(nuevo);
   }
